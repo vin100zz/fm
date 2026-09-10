@@ -193,11 +193,16 @@ sont **dormants** : présents en mémoire, jamais simulés, accessibles au merca
 Séparer strictement :
 
 ```
-core/world/import/
+core/world/importation/
   lecteurs.py       CSV/JSON → dict brut
+  postes_fm.py      notation de poste de la source -> Poste (voir plus bas)
   validation.py     contrôles d'intégrité
   construction.py   dict → entités du domaine
   perimetre.py      détermination actif / dormant
 ```
+
+`importation/`, pas `import/` : `import` est un mot réservé Python, impossible
+à utiliser comme nom de paquet dans une instruction `from a.b.import.c import
+d`. Écart volontaire par rapport au nom suggéré plus haut dans ce document.
 
 Un changement de format de données fourni ne doit toucher que `lecteurs.py`.

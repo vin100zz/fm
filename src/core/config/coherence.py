@@ -9,6 +9,7 @@ import dataclasses
 from typing import Any
 
 from core.config.modeles.racine import Config
+from core.domain.poste import Poste
 
 TOLERANCE_SOMME = 1e-6
 
@@ -27,23 +28,19 @@ def verifier_coherence(config: Config) -> list[str]:
 
 
 def _postes_canoniques(config: Config, erreurs: list[str]) -> set[str]:
-    """The set of postes is defined by implications.json; every other file
-    that lists postes (formations, profils, note_globale...) must agree
-    with it.
+    """The set of postes is fixed by core.domain.poste.Poste (see its
+    docstring); every config file that lists postes (implications,
+    formations, profils, note_globale...) must agree with it.
     """
+    reference = {poste.value for poste in Poste}
     impl = config.implications
     ensembles = {
         "implications.vertical_attaque": set(impl.vertical_attaque),
         "implications.vertical_defense": set(impl.vertical_defense),
         "implications.lateral": set(impl.lateral),
     }
-    reference_nom, reference = next(iter(ensembles.items()))
     for nom, ensemble in ensembles.items():
-        if ensemble != reference:
-            erreurs.append(
-                f"{nom}: postes {sorted(ensemble)} incoherents avec "
-                f"{reference_nom} {sorted(reference)}"
-            )
+        erreurs += _comparer_postes(nom, ensemble, reference)
     return reference
 
 

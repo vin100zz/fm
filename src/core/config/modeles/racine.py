@@ -8,6 +8,7 @@ from core.config.modeles.etats import ConfigEtats
 from core.config.modeles.formations import ConfigFormations
 from core.config.modeles.ia_gestion import ConfigIA
 from core.config.modeles.implications import ConfigImplications
+from core.config.modeles.import_donnees import ConfigImport
 from core.config.modeles.moteur_match import ConfigMoteur
 from core.config.modeles.monde import ConfigMonde
 
@@ -23,3 +24,4 @@ class Config:
     ia: ConfigIA
     demographie: ConfigDemographie
     benchmarks: ConfigBenchmarks
+    import_donnees: ConfigImport

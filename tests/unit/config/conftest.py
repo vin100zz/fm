@@ -4,20 +4,12 @@ from pathlib import Path
 
 import pytest
 
-DOSSIER_CONFIG_REEL = Path(__file__).resolve().parents[3] / "config"
-
 
 @pytest.fixture
-def dossier_config() -> Path:
-    """The real config/ folder shipped with the project."""
-    return DOSSIER_CONFIG_REEL
-
-
-@pytest.fixture
-def config_modifiable(tmp_path: Path) -> Path:
+def config_modifiable(tmp_path: Path, dossier_config: Path) -> Path:
     """A writable copy of the real config/ folder, for tests that break one file."""
     copie = tmp_path / "config"
-    shutil.copytree(DOSSIER_CONFIG_REEL, copie)
+    shutil.copytree(dossier_config, copie)
     return copie
 
 

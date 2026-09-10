@@ -37,7 +37,7 @@ def test_echoue_si_fichier_manquant(tmp_path: Path) -> None:
         charger_config(dossier_vide)
 
     assert any("introuvable" in erreur for erreur in exc.value.erreurs)
-    assert len(exc.value.erreurs) == 9  # one per missing file
+    assert len(exc.value.erreurs) == 10  # one per missing file
 
 
 def test_echoue_si_cle_inconnue(config_modifiable: Path) -> None:

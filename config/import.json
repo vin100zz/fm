@@ -1,0 +1,23 @@
+{
+  "_note": "Parametres de synthese provisoire (v0) : data/clubs.csv et data/players.csv (export d'un jeu tiers) ne contiennent ni attributs de joueur, ni potentiel, ni reputation/budget de club. Ces valeurs sont approchees ici a partir de Value/Wage/Stad Cap, en reutilisant autant que possible ia_gestion.json et attributs.json plutot que de dupliquer des coefficients. A retirer/remplacer si l'utilisateur fournit une vraie source (voir docs/modele-donnees.md).",
+  "synthese_attributs": {
+    "_note": "Niveau estime en inversant grossierement ia_gestion.valorisation (Value -> niveau), puis attributs generes comme un regen via attributs.profils_generation.",
+    "niveau": {"min": 35, "max": 99},
+    "marge_potentiel_defaut": 3,
+    "marge_potentiel_jeune_max": 15,
+    "marge_potentiel_age_seuil": 21
+  },
+  "synthese_club": {
+    "_note": "Reputation/centre de formation approches depuis Stad Cap (echelle log). Budgets derives de ia_gestion.budgets a partir de cette reputation.",
+    "stad_cap_reference": {"min": 2000, "max": 90000},
+    "reputation": {"min": 15, "max": 95},
+    "reputation_bruit_ecart_type": 5.0,
+    "note_centre_formation": {"min": 15, "max": 90},
+    "note_centre_formation_facteur_reputation": 0.55,
+    "note_centre_formation_bruit_ecart_type": 10.0
+  },
+  "postes": {
+    "_note": "Notation du jeu source (ex. 'AM RL, ST') parsee par core/world/import/postes_fm.py.",
+    "affinite_secondaire_defaut": 0.6
+  }
+}

@@ -15,6 +15,7 @@ from core.config.modeles.etats import ConfigEtats
 from core.config.modeles.formations import ConfigFormations
 from core.config.modeles.ia_gestion import ConfigIA
 from core.config.modeles.implications import ConfigImplications
+from core.config.modeles.import_donnees import ConfigImport
 from core.config.modeles.moteur_match import ConfigMoteur
 from core.config.modeles.monde import ConfigMonde
 from core.config.modeles.racine import Config
@@ -29,6 +30,7 @@ _FICHIERS: dict[str, tuple[str, type]] = {
     "ia": ("ia_gestion.json", ConfigIA),
     "demographie": ("demographie.json", ConfigDemographie),
     "benchmarks": ("benchmarks.json", ConfigBenchmarks),
+    "import_donnees": ("import.json", ConfigImport),
 }
 
 

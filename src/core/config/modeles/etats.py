@@ -12,6 +12,9 @@ class IntensiteHauteurBloc:
 
 @dataclass(frozen=True, slots=True, config=STRICT)
 class FatigueConfig:
+    min: float
+    max: float
+    initiale: float
     consommation_par_minute: float
     resistance_base: float
     resistance_facteur_endurance: float
