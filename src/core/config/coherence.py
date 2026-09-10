@@ -9,6 +9,7 @@ import dataclasses
 from typing import Any
 
 from core.config.modeles.racine import Config
+from core.domain.geometrie import COULOIRS_ORDONNES, ZONES_ORDONNEES
 from core.domain.poste import Poste
 
 TOLERANCE_SOMME = 1e-6
@@ -49,6 +50,20 @@ def _verifier_geometrie_implications(config: Config) -> list[str]:
     n_zones = len(impl.zones)
     n_couloirs = len(impl.couloirs)
     erreurs: list[str] = []
+
+    zones_attendues = [zone.value for zone in ZONES_ORDONNEES]
+    if impl.zones != zones_attendues:
+        erreurs.append(
+            f"implications.zones: {impl.zones}, attendu {zones_attendues} dans cet ordre "
+            "(core.domain.geometrie.Zone — les vecteurs par poste sont positionnels)"
+        )
+    couloirs_attendus = [couloir.value for couloir in COULOIRS_ORDONNES]
+    if impl.couloirs != couloirs_attendus:
+        erreurs.append(
+            f"implications.couloirs: {impl.couloirs}, attendu {couloirs_attendus} dans cet ordre "
+            "(core.domain.geometrie.Couloir — les vecteurs par poste sont positionnels)"
+        )
+
     for poste, vecteur in impl.vertical_attaque.items():
         if len(vecteur) != n_zones:
             erreurs.append(

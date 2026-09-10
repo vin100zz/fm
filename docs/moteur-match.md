@@ -4,6 +4,45 @@
 > Les tableaux ci-dessous documentent les valeurs initiales ; la source de
 > vérité est le JSON. Aucune constante ne doit apparaître dans le code.
 
+## État de l'implémentation (2026-09-10)
+
+Le moteur par possessions est implémenté dans `src/core/engine/` (`possession.py`,
+`notes_zones.py`, `composites.py`, `couloirs.py`, `occasion.py`,
+`coups_arretes.py`, `cartons.py`, `chronologie.py`, `selection_joueur.py`,
+`match.py`) et fonctionne de bout en bout (~6 ms/match, sous la cible de 20 ms).
+Points à connaître avant d'y toucher :
+
+**Formules non spécifiées ici, tranchées pendant l'implémentation** — ce
+document ne donne pas `ajuster()` (résolution tir/tête contre gardien) ni la
+pondération exacte de la vision dans le changement d'aile. `ajuster()` déplace
+le log-odds du xG de base par l'écart de composite attaquant/défenseur
+(`sensibilite_tireur_gardien`), de sorte que composites égaux reproduisent
+le xG de base — voir le docstring dans `occasion.py`. Le changement d'aile
+centre le taux configuré sur une vision moyenne de 50 (voir `couloirs.py`).
+
+**Bug trouvé et corrigé en calibrant** : un contre qui échoue près du but
+redéclenchait un nouveau contre pour l'autre équipe, en boucle — un match
+produisait 150+ tirs. Corrigé : un contre qui échoue retombe en zone
+`DEFENSE`, il ne s'enchaîne jamais directement dans un autre contre (voir le
+commentaire dans `match.py::_possession_suivante`).
+
+**Volontairement hors périmètre pour cette passe**, pas oublié : forme/fatigue/
+moral sont lus une fois au coup d'envoi (pas de dynamique en cours de match,
+ni recalcul aux paliers de fatigue — la vraie dynamique de fatigue est
+l'étape 6) ; pas de remplacement en cours de match (besoin de
+`AIController.decider_remplacement`, étape 7) ; pas de blessure en match
+(étape 6) ; `hauteur_bloc` existe sur `Equipe` mais n'est pas encore consommé
+par le moteur (zone de récupération, vulnérabilité au contre — à ajouter
+quand ces effets seront calibrés) ; le gardien ne peut jamais être expulsé
+(pas de remplacement par un joueur de champ dans ce modèle).
+
+**Calibrage** : `k_prog=0.13`, `k_occ=0.11` donnent des totaux de tirs et de
+buts dans le bon ordre de grandeur sur PSG-Toulouse, Man City-Burnley et le
+Clasico (balayage manuel, pas encore via le harnais). La différenciation
+victoire/nul/défaite reste trop faible (les favoris ne gagnent pas assez
+souvent) — calibrage complet à faire via `benchmarks` (suites `stats_match`
+et `formations` étendues à ce moteur, puis `match`), pas encore fait.
+
 ## Deux moteurs
 
 **Moteur analytique** (à écrire en premier, à conserver ensuite)

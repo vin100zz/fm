@@ -35,3 +35,10 @@ class Attributs:
 
 
 NOMS_ATTRIBUTS: tuple[str, ...] = tuple(champ.name for champ in dataclasses.fields(Attributs))
+
+
+def combinaison_ponderee(attributs: Attributs, poids: dict[str, float]) -> float:
+    """Any composite (note_globale, progression_attaque, tir...) is this
+    same operation against a different weight table from config/attributs.json.
+    """
+    return sum(coefficient * attributs.valeur(nom) for nom, coefficient in poids.items())

@@ -1,14 +1,14 @@
-"""Match and match-result shapes. Only the parts modele-donnees.md
-already specifies precisely — the Evenement hierarchy and the exact
-StatsEquipe fields are a step-3 (moteur de match) concern and will
-firm up then; nothing in step 2 constructs any of these, they only
-exist so Competition/Monde can be typed per docs/modele-donnees.md.
+"""Match and match-result shapes — see docs/modele-donnees.md and
+docs/moteur-match.md. Evenement is produced by the possession engine
+(core/engine/match.py); the analytical engine (core/engine/analytique.py)
+leaves evenements empty and StatsEquipe's fields at None.
 """
 
 from dataclasses import dataclass, field
 from enum import Enum
 
 from core.domain.date import Date
+from core.domain.geometrie import Couloir, Zone
 
 
 @dataclass(slots=True)
@@ -32,8 +32,14 @@ class Evenement:
     type: TypeEvenement
     joueur_id: int
     joueur_secondaire_id: int | None
-    zone: str | None
-    couloir: str | None
+    zone: Zone | None
+    couloir: Couloir | None
+    # Free-text classifier docs/modele-donnees.md doesn't otherwise carry a
+    # field for — "jaune"/"rouge" for TypeEvenement.CARTON, "corner"/
+    # "coup_franc" for a set piece, "contre" for a break. Kept generic
+    # rather than a subclass per event type: the engine produces one flat
+    # Evenement shape and consumers filter by `type` (and this) as needed.
+    detail: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

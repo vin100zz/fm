@@ -9,8 +9,8 @@
     "secondes_par_arret_de_jeu": 25
   },
   "transitions": {
-    "k_prog": 0.055,
-    "k_occ": 0.048,
+    "k_prog": 0.13,
+    "k_occ": 0.11,
     "bonus_domicile": 0.13
   },
   "densite": {

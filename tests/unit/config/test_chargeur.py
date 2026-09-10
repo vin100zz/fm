@@ -122,4 +122,4 @@ def test_surcharge_remplace_uniquement_les_cles_donnees(
     config = charger_config(dossier_config, surcharge=surcharge)
 
     assert config.moteur.transitions.k_prog == 0.09
-    assert config.moteur.transitions.k_occ == 0.048  # untouched
+    assert config.moteur.transitions.k_occ == 0.11  # untouched

@@ -4,6 +4,7 @@ from core.domain.competition import Competition
 from core.domain.contrat import Contrat
 from core.domain.date import Date
 from core.domain.etat_joueur import Blessure, Gravite, Suspension
+from core.domain.geometrie import Couloir, Zone
 from core.domain.historique import Historique, TransfertHistorique
 from core.domain.joueur import Joueur
 from core.domain.match import Evenement, Journee, Match, ResultatMatch, StatsEquipe, TypeEvenement
@@ -16,6 +17,7 @@ __all__ = [
     "Club",
     "Competition",
     "Contrat",
+    "Couloir",
     "Date",
     "Evenement",
     "Gravite",
@@ -32,4 +34,5 @@ __all__ = [
     "Suspension",
     "TransfertHistorique",
     "TypeEvenement",
+    "Zone",
 ]

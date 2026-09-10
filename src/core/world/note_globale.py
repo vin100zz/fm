@@ -5,9 +5,9 @@ from step 2, to rank a squad when trimming it to size at import.
 """
 
 from core.config.modeles.attributs import ConfigAttributs
+from core.domain.attributs import combinaison_ponderee
 from core.domain.joueur import Joueur
 
 
 def note_globale(joueur: Joueur, cfg: ConfigAttributs) -> float:
-    poids = cfg.note_globale[joueur.poste.value]
-    return sum(coefficient * joueur.attributs.valeur(nom) for nom, coefficient in poids.items())
+    return combinaison_ponderee(joueur.attributs, cfg.note_globale[joueur.poste.value])
