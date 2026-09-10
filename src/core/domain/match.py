@@ -38,12 +38,17 @@ class Evenement:
 
 @dataclass(frozen=True, slots=True)
 class StatsEquipe:
-    tirs: int
-    xg: float
-    possession_pct: float
-    corners: int
-    cartons_jaunes: int
-    cartons_rouges: int
+    """All fields optional: the analytical engine (step 3) only produces a
+    score, none of this detail — see docs/moteur-match.md. The possession
+    engine (step 5) always fills every field.
+    """
+
+    tirs: int | None = None
+    xg: float | None = None
+    possession_pct: float | None = None
+    corners: int | None = None
+    cartons_jaunes: int | None = None
+    cartons_rouges: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

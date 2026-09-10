@@ -56,9 +56,10 @@
     "sur_carton_rouge": true
   },
   "analytique": {
-    "_note": "Moteur Poisson de reference",
+    "_note": "Moteur Poisson de reference. buts_attendus_min evite un lambda nul ou negatif quand l'ecart de force est tres defavorable.",
     "buts_attendus_base": 1.35,
     "sensibilite_ecart_force": 0.028,
-    "bonus_domicile_buts": 0.30
+    "bonus_domicile_buts": 0.30,
+    "buts_attendus_min": 0.10
   }
 }

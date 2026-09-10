@@ -79,6 +79,7 @@ class AnalytiqueConfig:
     buts_attendus_base: float
     sensibilite_ecart_force: float
     bonus_domicile_buts: float
+    buts_attendus_min: float
 
 
 @dataclass(frozen=True, slots=True, config=STRICT)
