@@ -20,7 +20,10 @@ from core.config.modeles.moteur_match import ConfigMoteur
 from core.config.modeles.monde import ConfigMonde
 from core.config.modeles.racine import Config
 
-_FICHIERS: dict[str, tuple[str, type]] = {
+# Field name (on Config) -> (JSON filename, validated dataclass). Public:
+# benchmarks/runner.py reuses it to build parameter-sweep overrides
+# without duplicating this mapping.
+FICHIERS_CONFIG: dict[str, tuple[str, type]] = {
     "monde": ("monde.json", ConfigMonde),
     "attributs": ("attributs.json", ConfigAttributs),
     "implications": ("implications.json", ConfigImplications),
@@ -52,7 +55,7 @@ def charger_config(dossier: Path, surcharge: Path | None = None) -> Config:
     erreurs: list[str] = []
     sections: dict[str, object] = {}
 
-    for champ, (nom_fichier, classe) in _FICHIERS.items():
+    for champ, (nom_fichier, classe) in FICHIERS_CONFIG.items():
         chemin = dossier / nom_fichier
         if not chemin.is_file():
             erreurs.append(f"{nom_fichier}: fichier introuvable dans {dossier}")

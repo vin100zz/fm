@@ -12,40 +12,62 @@ de travail pendant tout le projet.
 
 ## Structure
 
+`benchmarks/` vit sous `src/` comme `core/` et `api/` (voir la structure du
+dépôt dans `CLAUDE.md`) :
+
 ```
-benchmarks/
-  runner.py            exécution, parallélisation, graine
-  cibles.py            chargement de config/benchmarks.json
-  rapport.py           sortie console + JSON + CSV
-  variantes/           dossiers de surcharge de config
+src/benchmarks/
+  runner.py               exécution, graine, balayage (pas encore de parallélisme réel)
+  cibles.py                resout les noms de club de affrontements_reference
+                            contre l'instantané figé
+  rapport.py                ResultatCible, sortie console + JSON + CSV
+  generer_effectifs.py       ecrit l'instantané (a lancer a la main)
+  effectifs/
+    match.json               instantané figé, versionné — voir "Effectifs figés"
   suites/
-    match.py           distribution des résultats d'un affrontement
-    saison.py          points, champion, écart-type
-    stats_match.py     tirs, xG, possession, cartons
-    formations.py      matrice formation contre formation
-    oracle.py          moteur possession contre moteur analytique
-    demographie.py     population sur 30 saisons
-    economie.py        masse salariale, transferts, concentration
-    performance.py     temps CPU par match et par saison
+    match.py                 implémentée — la seule mesurable sans moteur par
+                              possessions ni calendrier de saison
+    performance.py            implémentée, partiellement : seul
+                              `secondes_chargement_donnees` est mesurable
+                              aujourd'hui, le reste répond `non_mesurable`
+                              (voir docs/benchmarks.md plus bas)
+    saison.py                 pas encore — besoin d'un calendrier de saison
+    stats_match.py             pas encore — besoin du moteur par possessions
+    formations.py               pas encore — besoin du moteur par possessions
+    oracle.py                   pas encore — besoin de MoteurPossession
+    demographie.py               pas encore — besoin de la démographie (étape 8)
+    economie.py                   pas encore — besoin de l'IA de mercato (étape 7)
 ```
+
+Les suites non implémentées le seront quand leur prérequis existera —
+naturellement au fil des étapes suivantes de l'ordre de construction, pas
+d'un coup. `variantes/` (dossiers de surcharge prêts à l'emploi) n'existe pas
+encore non plus : rien à y mettre tant qu'aucun calibrage n'est en cours.
 
 ## Invocation
 
 ```bash
 python -m benchmarks.runner --suite match --iterations 10000
 python -m benchmarks.runner --suite tout --rapport rapports/2026-09-10.json
-python -m benchmarks.runner --suite match --balayage moteur.k_prog=0.03:0.09:0.01
+python -m benchmarks.runner --suite match --balayage moteur.analytique.sensibilite_ecart_force=0.020:0.040:0.005
 ```
+
+Chemin de balayage : le chemin pointé complet dans la config chargée
+(`moteur.analytique.sensibilite_ecart_force`, pas un raccourci) — voir
+`core.config.chargeur.FICHIERS_CONFIG` pour la correspondance entre le
+premier segment et le fichier JSON.
+
+`python -m benchmarks.runner` suppose le paquet installé (`pip install -e .`
+depuis la racine du dépôt, une fois) — sinon `core` et `benchmarks` ne sont
+pas sur le chemin d'import.
 
 Sortie console : une ligne par cible, verte ou rouge, avec valeur mesurée,
 cible, tolérance et écart.
 
 ```
-match/psg_dom_toulouse    victoire  0.732   cible 0.75 ±0.05   OK
-match/psg_dom_toulouse    nul       0.211   cible 0.20 ±0.04   OK
-match/psg_dom_toulouse    defaite   0.057   cible 0.05 ±0.03   OK
-stats/tirs_par_equipe     12.8      cible 13.0 ±1.0            OK
-stats/xg_par_equipe        1.61      cible  1.40 ±0.15         ECHEC  (+0.21)
+match/psg_dom_toulouse/victoire    0.732   cible 0.75 +/-0.05   OK
+match/psg_dom_toulouse/nul         0.211   cible 0.20 +/-0.04   OK
+match/psg_dom_toulouse/defaite     0.057   cible 0.05 +/-0.03   OK
 ```
 
 Sortie JSON pour l'historisation, CSV pour tracer l'évolution d'un paramètre lors

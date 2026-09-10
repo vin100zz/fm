@@ -1,5 +1,5 @@
 {
-  "_note": "Cibles de calibrage. Une suite est verte si toutes ses cibles sont dans la tolerance.",
+  "_note": "Cibles de calibrage. Une suite est verte si toutes ses cibles sont dans la tolerance. Noms de club dans affrontements_reference : doivent correspondre exactement a data/clubs.csv (colonne Name) pour un club ACTIF — plusieurs noms y sont dupliques entre ligues (ex. deux 'Burnley'), la resolution ne retient que celui dont le statut est actif. PSG='Paris SG', Real Madrid='R. Madrid', Barcelona='Barcelone', Manchester City='Man City', Toulouse='Toulouse FC' dans les donnees fournies.",
   "execution": {
     "iterations_defaut_match": 10000,
     "iterations_defaut_saison": 1000,
@@ -9,13 +9,13 @@
     "parallelisme": "auto"
   },
   "affrontements_reference": [
-    {"id": "psg_dom_toulouse", "domicile": "PSG", "exterieur": "Toulouse",
+    {"id": "psg_dom_toulouse", "domicile": "Paris SG", "exterieur": "Toulouse FC",
      "victoire": 0.75, "nul": 0.20, "defaite": 0.05, "tolerance": [0.05, 0.04, 0.03]},
-    {"id": "psg_ext_toulouse", "domicile": "Toulouse", "exterieur": "PSG",
+    {"id": "psg_ext_toulouse", "domicile": "Toulouse FC", "exterieur": "Paris SG",
      "victoire": 0.14, "nul": 0.24, "defaite": 0.62, "tolerance": [0.04, 0.04, 0.05]},
-    {"id": "mancity_dom_burnley", "domicile": "Manchester City", "exterieur": "Burnley",
+    {"id": "mancity_dom_burnley", "domicile": "Man City", "exterieur": "Burnley",
      "victoire": 0.78, "nul": 0.16, "defaite": 0.06, "tolerance": [0.05, 0.04, 0.03]},
-    {"id": "clasico_dom", "domicile": "Real Madrid", "exterieur": "Barcelona",
+    {"id": "clasico_dom", "domicile": "R. Madrid", "exterieur": "Barcelone",
      "victoire": 0.44, "nul": 0.27, "defaite": 0.29, "tolerance": [0.05, 0.04, 0.05]},
     {"id": "egaux_dom", "domicile": "__NIVEAU_70__", "exterieur": "__NIVEAU_70__",
      "victoire": 0.45, "nul": 0.27, "defaite": 0.28, "tolerance": [0.04, 0.04, 0.04]}

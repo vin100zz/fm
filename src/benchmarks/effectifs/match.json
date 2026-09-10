@@ -1,0 +1,26 @@
+{
+  "Barcelone": {
+    "force_attaque": 97.31382812500004,
+    "force_defense": 97.2613559322034
+  },
+  "Burnley": {
+    "force_attaque": 91.0456652360515,
+    "force_defense": 91.22184100418411
+  },
+  "Man City": {
+    "force_attaque": 98.23127962085307,
+    "force_defense": 98.12116071428571
+  },
+  "Paris SG": {
+    "force_attaque": 98.71946666666668,
+    "force_defense": 98.66202429149796
+  },
+  "R. Madrid": {
+    "force_attaque": 96.88534482758621,
+    "force_defense": 96.79907172995782
+  },
+  "Toulouse FC": {
+    "force_attaque": 81.90121495327105,
+    "force_defense": 83.04578723404256
+  }
+}
