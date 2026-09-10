@@ -112,10 +112,10 @@ src/
     config/      chargement et validation des fichiers config
   api/           FastAPI, couche mince au-dessus de core
   benchmarks/    harnais de calibrage — voir docs/benchmarks.md
-  tests/
-    unit/        tests unitaires, rapides, déterministes
-    integration/ tests de scénarios sur plusieurs saisons
 web/             front statique
+tests/
+  unit/          tests unitaires, rapides, déterministes
+  integration/   tests de scénarios sur plusieurs saisons
 data/            données fournies par l'utilisateur (clubs, joueurs, noms)
 migrations/      transformations de schéma de sauvegarde
 ```
