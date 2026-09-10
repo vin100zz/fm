@@ -18,11 +18,13 @@ from benchmarks import rapport
 from benchmarks.rapport import ResultatCible
 from benchmarks.suites import match as suite_match
 from benchmarks.suites import performance as suite_performance
+from benchmarks.suites import stats_match as suite_stats_match
 
 _RACINE = Path(__file__).resolve().parent.parent.parent
 _SUITES = {
     "match": suite_match.executer,
     "performance": suite_performance.executer,
+    "stats_match": suite_stats_match.executer,
 }
 
 

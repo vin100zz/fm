@@ -235,6 +235,22 @@ Ordre de calibrage recommandé :
 Ne jamais calibrer une étape avant que la précédente soit verte : les
 coefficients des étapes suivantes dépendent des précédentes.
 
+**État du moteur analytique (2026-09-10)** : `moteur.analytique` calé via
+`--balayage` sur `stats_match` (partielle) et `match` —
+`buts_attendus_base=1.20`, `bonus_domicile_buts=0.225`,
+`sensibilite_ecart_force=0.045`. 18/19 cibles de la suite `match` au vert.
+Seul `mancity_dom_burnley` reste hors cible : dans l'instantané
+(`benchmarks/effectifs/match.json`), Burnley ressort à 91 de force contre 98.2
+pour Man City — un écart de 7 points, insuffisant pour produire la
+domination attendue (0.78/0.16/0.06), alors que Toulouse (82 contre 98.7 pour
+le PSG, écart de 16) se cale bien. Cause probable : la synthèse v0 des
+attributs depuis `Value` (voir docs/modele-donnees.md) sature en haut
+d'échelle et compresse l'écart entre « très bon » et « bon » — un vrai
+problème de données, pas un défaut de formule. Pousser
+`sensibilite_ecart_force` plus haut pour rattraper Burnley fait sur-réagir
+Toulouse bien avant que Burnley n'approche sa cible (vérifié jusqu'à 0.060).
+À revisiter si de vraies données d'attributs remplacent la synthèse.
+
 ## Reproductibilité
 
 Chaque exécution enregistre : graine, version de config, empreinte des effectifs
