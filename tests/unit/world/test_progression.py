@@ -3,7 +3,7 @@ from random import Random
 from core.config import Config
 from core.domain.date import Date
 from core.world.note_globale import note_globale
-from core.world.progression import facteur_par_age, progresser
+from core.world.progression import facteur_par_age, progresser, progresser_dormant
 from tests.unit.world.fabriques_domaine import des_attributs, un_joueur
 
 DATE_ACTUELLE = Date(2026, 8, 10)
@@ -99,3 +99,18 @@ class TestProgresser:
             progresser(joueur, minutes_mois=400, date_actuelle=DATE_ACTUELLE, rng=Random(1), cfg=cfg)
 
         assert cfg.attributs.bornes.min <= joueur.attributs.vitesse <= cfg.attributs.bornes.max
+
+
+class TestProgresserDormant:
+    def test_equivaut_a_jouer_a_plein_temps(self, cfg: Config) -> None:
+        """"Courbe d'âge seule, sans temps de jeu" — même résultat que
+        `progresser` avec des minutes fixées à la reference (facteur_jeu=1.0).
+        """
+        cfg_prog = cfg.demographie.progression
+        plein_temps = un_joueur(date_naissance=Date(2008, 1, 1), attributs=des_attributs(), potentiel=90)
+        dormant = un_joueur(date_naissance=Date(2008, 1, 1), attributs=des_attributs(), potentiel=90)
+
+        progresser(plein_temps, cfg_prog.minutes_reference_par_mois, DATE_ACTUELLE, Random(1), cfg)
+        progresser_dormant(dormant, DATE_ACTUELLE, Random(1), cfg)
+
+        assert note_globale(plein_temps, cfg.attributs) == note_globale(dormant, cfg.attributs)

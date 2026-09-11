@@ -43,7 +43,7 @@ class Joueur:
     id: int
     nom: str
     prenom: str
-    nationalite: str          # code ISO 3 lettres
+    nationalite: str          # libelle FR brut de data/players.csv (ex. "France"), pas un code ISO — voir la note plus bas
     date_naissance: Date
 
     poste: Poste              # poste principal
@@ -257,9 +257,24 @@ valeur qu'elle est censée prédire.
 DM"`, 250 valeurs distinctes), pas l'énum `Poste` du domaine — table de
 correspondance à dériver de cette grammaire, à affiner une fois en place.
 
-**Fichiers complémentaires à générer si non fournis** (nécessaires aux regens) :
-- `prenoms_<pays>.csv` et `noms_<pays>.csv` avec une colonne de pondération
-- `nations.csv` : code, poids de production, force du football
+`Nation` est un texte libre, parfois multi-nationalité séparée par `/`
+(ex. `"Angleterre / Irlande"`) : seul le premier token est gardé comme
+`Joueur.nationalite`. C'est le libellé français brut de la donnée source
+("France", "Angleterre"...), **pas** un code ISO — contrairement à
+`ia_gestion.budgets.revenus.multiplicateur_pays` et `Club.pays`, qui
+utilisent le code court (`"FRA"`, `"ENG"`). `config/monde.json ->
+competitions_simulees[].nationalite_source` fait le pont entre les deux
+vocabulaires pour les 5 pays simulés (étape 8, voir
+`docs/progression-demographie.md`).
+
+**Fichiers complémentaires envisagés, jamais fournis ni générés**
+(regens, étape 8) : `prenoms_<pays>.csv`/`noms_<pays>.csv` et
+`nations.csv` (code, poids de production, force du football) n'existent
+pas. À la place : les pools de noms sont construits depuis la population
+déjà importée (`core/world/demographie/identite.py`), et le poids/force
+par nation réutilisent respectivement `nb_clubs` et
+`multiplicateur_pays`, déjà en config — voir "Formules non données par le
+document" dans `docs/progression-demographie.md`.
 
 ## Validation au chargement
 

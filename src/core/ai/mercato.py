@@ -3,6 +3,12 @@
 testable functions: the multi-club negotiation loop ("tour_mercato")
 needs a season/calendar orchestrator that doesn't exist yet (see
 docs/ia-gestion.md §5), so it is not built here.
+
+`repondre_offre_dormant` (docs/progression-demographie.md's "Marché
+extérieur") is the equivalent for the ~25 900 dormant clubs: they skip
+the full patience/surplus negotiation a real `Club` stance drives,
+using a flat probabilistic heuristic instead
+(`ia_gestion.mercato.clubs_dormants`).
 """
 
 from random import Random
@@ -41,6 +47,14 @@ def repondre_offre(
         return Reponse(TypeReponse.ACCEPTE)
     if offre.montant >= seuil * cfg_m.ratio_contre_offre:
         return Reponse(TypeReponse.CONTRE_OFFRE, contre_montant=round(seuil))
+    return Reponse(TypeReponse.REFUSE)
+
+
+def repondre_offre_dormant(offre: Offre, joueur: Joueur, date_actuelle: Date, cfg: Config, rng: Random) -> Reponse:
+    cfg_d = cfg.ia.mercato.clubs_dormants
+    prix_demande = valeur(joueur, date_actuelle, cfg) * cfg_d.multiplicateur_prix_demande
+    if offre.montant >= prix_demande and rng.random() < cfg_d.probabilite_acceptation_offre_au_prix:
+        return Reponse(TypeReponse.ACCEPTE)
     return Reponse(TypeReponse.REFUSE)
 
 

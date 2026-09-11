@@ -1,6 +1,6 @@
 from random import Random
 
-from core.ai.mercato import repondre_offre, score_offre, surplus
+from core.ai.mercato import repondre_offre, repondre_offre_dormant, score_offre, surplus
 from core.ai.valorisation import valeur
 from core.config import Config
 from core.domain.attributs import Attributs
@@ -82,3 +82,21 @@ def test_score_offre_croit_avec_le_salaire_propose(cfg: Config) -> None:
     faible = score_offre(joueur, club, 1_000, [], DATE, cfg, Random(1))
     fort = score_offre(joueur, club, 1_000_000_000, [], DATE, cfg, Random(1))
     assert fort > faible
+
+
+def test_repondre_offre_dormant_accepte_une_offre_tres_genereuse(cfg: Config) -> None:
+    joueur = un_joueur(id=1, poste=Poste.BU, attributs=_uniforme(60))
+    prix = valeur(joueur, DATE, cfg)
+    offre = Offre(joueur_id=1, club_acheteur_id=2, montant=round(prix * 5), salaire_propose=20_000)
+
+    reponses = {repondre_offre_dormant(offre, joueur, DATE, cfg, Random(i)).type for i in range(50)}
+    assert TypeReponse.ACCEPTE in reponses
+
+
+def test_repondre_offre_dormant_refuse_une_offre_derisoire(cfg: Config) -> None:
+    joueur = un_joueur(id=1, poste=Poste.BU, attributs=_uniforme(60))
+    prix = valeur(joueur, DATE, cfg)
+    offre = Offre(joueur_id=1, club_acheteur_id=2, montant=round(prix * 0.01), salaire_propose=20_000)
+
+    for i in range(20):
+        assert repondre_offre_dormant(offre, joueur, DATE, cfg, Random(i)).type is TypeReponse.REFUSE

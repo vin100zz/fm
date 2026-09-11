@@ -1,12 +1,12 @@
 {
   "version_config": 1,
-  "_note": "Perimetre simule et calendrier. Les clubs hors de ce perimetre sont dormants. division_id identifie la premiere division dans les donnees fournies (data/clubs.csv, colonne 'Division ID') ; le nom de la ligue n'y est pas fiable pour le filtrage.",
+  "_note": "Perimetre simule et calendrier. Les clubs hors de ce perimetre sont dormants. division_id identifie la premiere division dans les donnees fournies (data/clubs.csv, colonne 'Division ID') ; le nom de la ligue n'y est pas fiable pour le filtrage. nationalite_source est le libelle francais exact de la colonne 'Nation' de data/players.csv pour ce pays (ex. 'France', pas 'FRA') : Joueur.nationalite est stocke sous cette forme (docs/modele-donnees.md), utilisee telle quelle pour le tirage de nation des regens (docs/progression-demographie.md) au lieu de dupliquer une table de correspondance.",
   "competitions_simulees": [
-    {"pays": "FRA", "nom": "Ligue 1", "niveau": 1, "nb_clubs": 18, "division_id": 16},
-    {"pays": "ESP", "nom": "La Liga", "niveau": 1, "nb_clubs": 20, "division_id": 67},
-    {"pays": "ITA", "nom": "Serie A", "niveau": 1, "nb_clubs": 20, "division_id": 32},
-    {"pays": "ENG", "nom": "Premier League", "niveau": 1, "nb_clubs": 20, "division_id": 11},
-    {"pays": "GER", "nom": "Bundesliga", "niveau": 1, "nb_clubs": 18, "division_id": 22}
+    {"pays": "FRA", "nom": "Ligue 1", "niveau": 1, "nb_clubs": 18, "division_id": 16, "nationalite_source": "France"},
+    {"pays": "ESP", "nom": "La Liga", "niveau": 1, "nb_clubs": 20, "division_id": 67, "nationalite_source": "Espagne"},
+    {"pays": "ITA", "nom": "Serie A", "niveau": 1, "nb_clubs": 20, "division_id": 32, "nationalite_source": "Italie"},
+    {"pays": "ENG", "nom": "Premier League", "niveau": 1, "nb_clubs": 20, "division_id": 11, "nationalite_source": "Angleterre"},
+    {"pays": "GER", "nom": "Bundesliga", "niveau": 1, "nb_clubs": 18, "division_id": 22, "nationalite_source": "Allemagne"}
   ],
   "saison": {
     "debut_mois": 8, "debut_jour": 10,

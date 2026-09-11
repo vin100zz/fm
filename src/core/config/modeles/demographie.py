@@ -39,6 +39,17 @@ class RatioNiveauSurPotentiel:
 
 
 @dataclass(frozen=True, slots=True, config=STRICT)
+class NationsConfig:
+    poids_total_ligues_simulees: float
+    exposant_force_nation: float
+
+
+@dataclass(frozen=True, slots=True, config=STRICT)
+class IdentiteConfig:
+    tentatives_max_unicite: int
+
+
+@dataclass(frozen=True, slots=True, config=STRICT)
 class GenerationConfig:
     potentiel_min: int
     potentiel_amplitude: int
@@ -90,6 +101,8 @@ class ConfigDemographie:
     estimation_potentiel: EstimationPotentielConfig
     cohorte: CohorteConfig
     cible_postes: dict[str, float]
+    nations: NationsConfig
+    identite: IdentiteConfig
     generation: GenerationConfig
     centres_formation: CentresFormationConfig
     sorties: SortiesConfig

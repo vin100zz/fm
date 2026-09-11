@@ -21,7 +21,65 @@ pas en dessous. Pas retouché, c'est le comportement exact de la formule
 documentée.
 
 La génération de regens et le pilotage démographique ("Démographie" et
-sections suivantes) restent non implémentés — c'est l'étape 8, pas 6.
+sections suivantes) sont implémentés dans `src/core/world/demographie/`
+(étape 8) :
+
+- `generation.py` : le tirage complet d'un joueur (§"Tirage d'un joueur")
+  et `promouvoir_centre_formation` (§"Centres de formation").
+- `identite.py` : pools de noms et tirage d'identité (§6, voir la note
+  dédiée ci-dessous).
+- `cohorte.py` : la boucle de rétroaction (`corriger`, `corriger_poids`)
+  et le comptage de population par poste/nation/palier de niveau.
+- `sorties.py` : `probabilite_retraite` et `sort_du_perimetre`.
+
+Plus deux ajouts à des fichiers existants pour le marché extérieur :
+`core/world/progression.py::progresser_dormant` et
+`core/ai/mercato.py::repondre_offre_dormant`.
+
+**Volontairement hors périmètre**, comme pour l'étape 7 : rien n'appelle
+encore ces fonctions selon un calendrier — pas de boucle de saison, donc
+pas de "chaque été" pour la correction démographique, pas de date fixe
+mi-juin pour les centres de formation (`config/monde.json ->
+dates_cles.promotion_centre_formation` existe, n'est consommé nulle
+part), pas de suppression effective d'un `Joueur` à la retraite
+(`probabilite_retraite` est une fonction pure ; rien ne retire encore un
+joueur du monde). Le flux entre monde actif et dormant
+(`docs/modele-donnees.md`, `part_transferts_depuis_dormants`) n'est pas
+mesuré non plus, faute de boucle de mercato pour le produire (voir
+`docs/ia-gestion.md`).
+
+**Aucune liste de prénoms/noms n'a été fournie** (seuls `data/clubs.csv`
+et `data/players.csv` existent — voir `docs/modele-donnees.md`) : les
+pools de `identite.py` sont construits depuis la population déjà
+importée elle-même, groupée par `Joueur.nationalite`. C'est gratuit et
+réaliste (un pool par nation avec sa vraie distribution de noms), au prix
+d'un couplage : la nation d'un régen doit être exprimée dans le même
+vocabulaire que `Joueur.nationalite` (le libellé français brut de la
+colonne "Nation" du CSV, ex. "France", "Angleterre" — pas le code ISO
+court `pays` utilisé par ailleurs pour `Club.pays`, ex. "FRA", "ENG").
+`config/monde.json -> competitions_simulees[].nationalite_source` fait le
+pont entre les deux vocabulaires, en config plutôt que codé en dur.
+
+**Formules non données par le document, tranchées pendant
+l'implémentation** :
+
+- La "force" d'une nation (§1, alpha/beta du tirage de potentiel) réutilise
+  `ia_gestion.budgets.revenus.multiplicateur_pays` (déjà calibré) plutôt
+  qu'un nouveau paramètre indépendant :
+  `alpha_nation = alpha_moyen * multiplicateur^exposant_force_nation`,
+  `beta_nation = beta_moyen / multiplicateur^exposant_force_nation` —
+  toujours positif, aucun clamp nécessaire. Voir `config/demographie.json
+  -> nations`.
+- Le "poids de production" par nation (§1) n'est pas une table
+  indépendante : il est réparti au prorata de
+  `monde.competitions_simulees[].nb_clubs` (déjà en config) à partir d'un
+  seul scalaire, `nations.poids_total_ligues_simulees` — le résidu va au
+  vivier extérieur.
+- `corriger(cible, observe)` (§"Boucle de rétroaction") compare des
+  **comptes bruts**, pas des proportions — c'est ce que
+  `max(observe, 1)` suppose (un bucket vide vaut 0 en proportion, pas 1).
+  `cohorte.py::corriger_poids` convertit la cible (proportion) en compte
+  attendu avant de comparer, puis renormalise.
 
 ## Progression et déclin
 

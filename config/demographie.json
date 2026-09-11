@@ -42,6 +42,15 @@
     "GB": 0.10, "DC": 0.18, "DL": 0.07, "DR": 0.07,
     "MDC": 0.12, "MC": 0.12, "MOC": 0.11, "AILG": 0.06, "AILD": 0.06, "BU": 0.11
   },
+  "nations": {
+    "_note": "Tirage de la nation d'un regen (docs section 'Tirage d'un joueur' > 1. Nation). poids_total_ligues_simulees est reparti entre les 5 pays au prorata de monde.competitions_simulees[].nb_clubs (deja en config, pas duplique) ; le residu (1 - poids_total_ligues_simulees) va au vivier exterieur abstrait. La force relative de chaque pays reutilise ia_gestion.budgets.revenus.multiplicateur_pays (deja calibre) plutot qu'un nouveau parametre independant : alpha_nation = beta_alpha_nation_moyenne * multiplicateur^exposant_force_nation, beta_nation = beta_beta_nation_moyenne / multiplicateur^exposant_force_nation (toujours positif, pas de clamp necessaire).",
+    "poids_total_ligues_simulees": 0.45,
+    "exposant_force_nation": 0.5
+  },
+  "identite": {
+    "_note": "Aucune liste de prenoms/noms n'a ete fournie (seuls data/clubs.csv et data/players.csv existent) — les pools sont construits depuis la population deja importee (voir core/world/demographie/identite.py). tentatives_max_unicite borne les redirages en cas de collision (prenom, nom) avant d'accepter le dernier tirage tel quel.",
+    "tentatives_max_unicite": 20
+  },
   "generation": {
     "potentiel_min": 35, "potentiel_amplitude": 65,
     "beta_alpha_nation_moyenne": 2.0,

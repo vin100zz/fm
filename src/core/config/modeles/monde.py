@@ -10,6 +10,7 @@ class CompetitionSimulee:
     niveau: int
     nb_clubs: int
     division_id: int
+    nationalite_source: str
 
 
 @dataclass(frozen=True, slots=True, config=STRICT)

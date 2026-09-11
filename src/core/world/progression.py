@@ -53,6 +53,17 @@ def progresser(joueur: Joueur, minutes_mois: float, date_actuelle: Date, rng: Ra
     _appliquer_delta(joueur, delta, marge, cfg)
 
 
+def progresser_dormant(joueur: Joueur, date_actuelle: Date, rng: Random, cfg: Config) -> None:
+    """Dormant-club players' progression: age curve only, no per-player
+    minutes tracking — "sans temps de jeu ni forme", negligible cost
+    even for 30 000 players, and the point is just that the market
+    doesn't freeze. Reuses `progresser` with minutes fixed at the
+    reference value so `facteur_jeu` is always 1.0 — the same age-only
+    shape `progresser` gives any regularly-playing active-club player.
+    """
+    progresser(joueur, cfg.demographie.progression.minutes_reference_par_mois, date_actuelle, rng, cfg)
+
+
 def _appliquer_delta(joueur: Joueur, delta: float, marge: float, cfg: Config) -> None:
     bornes = cfg.attributs.bornes
     cfg_prog = cfg.demographie.progression
