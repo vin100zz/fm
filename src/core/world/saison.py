@@ -5,26 +5,37 @@ docs/ui.md.
 
 Scope for this pass: match simulation on schedule, standings, daily
 fatigue recovery and injury rolls/healing, season-long suspension
-countdown, and end-of-season rollover (`_relancer_saisons_terminees`) —
-each competition gets its final table archived into
-`Monde.historique.palmares` and a fresh fixture list the moment its own
-calendrier is exhausted, independently of the others (Ligue 1's 18
-clubs and La Liga's 20 don't finish the same day). **No promotion or
-relegation**: the same `competition.club_ids` carry over forever — see
-`Competition.appliquer_fin_saison` in docs/architecture.md, still not
-built, and `docs/ui.md`.
+countdown, end-of-season rollover (`_relancer_saison_au_1er_juillet`)
+— one season per calendar year, 1st July to 30th June, per explicit
+user instruction: every competition's final table is archived into
+`Monde.historique.palmares` and every competition gets a fresh fixture
+list **together**, the moment `monde.date` crosses 1st July — not
+independently whenever each one's own calendrier happens to run out
+(Ligue 1's 18 clubs and La Liga's 20 finish playing at different points
+in April/May either way, since the fixture spacing alone determines
+that; the *administrative* season boundary is now the same calendar
+date for all five). The new fixture list itself doesn't start the next
+day — its first match is scheduled at `config/monde.json ->
+saison.debut_mois/jour` (mid-August) of that same year, leaving the
+close season gap `docs/ia-gestion.md`'s mercato window sits inside.
+Also as of this pass: the transfer window itself
+(`core.world.mercato.avancer_mercato`, called whenever `monde.date`
+falls inside `config/monde.json -> mercato.ete/hiver`). **No promotion
+or relegation**: the same `competition.club_ids` carry over forever —
+see `Competition.appliquer_fin_saison` in docs/architecture.md, still
+not built, and `docs/ui.md`.
 
-Deliberately not here (documented, not silently skipped): mercato
-windows and contract renewals (`docs/ia-gestion.md`'s own "hors
-périmètre" note — no negotiation loop exists yet), monthly progression
-(`core.world.progression.progresser` needs real per-player minutes
-played this month, which nothing records yet — only match *ratings*
-are tracked, not minutes), centre de formation promotion and the
-démographie bilan (both dated in `config/monde.json -> dates_cles`, but
-nothing triggers on a date here yet). Live in-match substitutions
-aren't wired either: `AIController.choisir_composition` returns only
-the onze, not the bench `MoteurPossession.simuler`'s optional `bancs`
-parameter (step 7) needs.
+Deliberately not here (documented, not silently skipped): weekly
+contract renewals and free agency (`core.ai.contrats.decision_renouvellement`
+exists, nothing calls it — see `core/world/mercato.py`'s own docstring),
+monthly progression (`core.world.progression.progresser` needs real
+per-player minutes played this month, which nothing records yet — only
+match *ratings* are tracked, not minutes), centre de formation
+promotion and the démographie bilan (both dated in `config/monde.json
+-> dates_cles`, but nothing triggers on a date here yet). Live in-match
+substitutions aren't wired either: `AIController.choisir_composition`
+returns only the onze, not the bench `MoteurPossession.simuler`'s
+optional `bancs` parameter (step 7) needs.
 """
 
 from random import Random
@@ -32,6 +43,7 @@ from random import Random
 from core.ai.controller import AIController
 from core.config.modeles.racine import Config
 from core.domain.competition import Competition
+from core.domain.date import Date
 from core.domain.historique import SaisonTerminee
 from core.domain.journal import EvenementJour, TypeEvenementJour
 from core.domain.match import Match
@@ -41,6 +53,7 @@ from core.world import appliquer_match
 from core.world.calendrier import generer_calendrier
 from core.world.classement import calculer_classement
 from core.world.etats import blessures, fatigue, suspensions
+from core.world.mercato import avancer_mercato
 
 _CONTROLEUR = AIController()
 _MOTEUR = MoteurPossession()
@@ -51,7 +64,7 @@ def matches_saison_courante(competition: Competition, monde: Monde) -> list[Matc
     `Monde.matches` — used by both the season loop and the read-side API
     (`api/routes_clubs.py`, `api/routes_competitions.py`) so a finished
     season's matches don't bleed into today's calendar/classement once
-    `_relancer_saisons_terminees` has moved `saison_actuelle` on.
+    `_relancer_saison_au_1er_juillet` has moved `saison_actuelle` on.
     """
     return [
         match for match in monde.matches.values()
@@ -76,31 +89,38 @@ def initialiser_saison(monde: Monde, cfg: Config, rng: Random) -> None:
         monde.prochain_id = max((match.id for match in matches), default=monde.prochain_id - 1) + 1
 
 
-def _relancer_saisons_terminees(monde: Monde, cfg: Config, rng: Random) -> list[EvenementJour]:
-    """A competition "ends" the moment every match of its current
-    `saison` has a `resultat` — archives the final table, resets the
-    season-long yellow-card count for its clubs' players, then
-    generates the next edition's fixtures immediately (same
-    `club_ids`: no promotion/relegation, see the module docstring).
+def _relancer_saison_au_1er_juillet(monde: Monde, cfg: Config, rng: Random) -> list[EvenementJour]:
+    """One season a year, 1st July to 30th June (explicit user
+    instruction, 2026-09-11) — every competition rolls over **together**
+    on this one date, not independently whenever its own calendrier
+    happens to be exhausted (see the module docstring). Archives
+    whichever matches were actually played this season, even if that
+    isn't all of them: with the configured fixture spacing a season's
+    matches always finish around April/May, well before the next 1st
+    July, but archiving on whatever was played rather than demanding
+    every match have a `resultat` is the more robust rule — an
+    abandoned/short season should still close out, not stall forever.
     """
+    if not (monde.date.mois == 7 and monde.date.jour == 1):
+        return []
+
     journal: list[EvenementJour] = []
+    date_debut_prochaine = Date(monde.date.annee, cfg.monde.saison.debut_mois, cfg.monde.saison.debut_jour)
 
     for competition in monde.competitions.values():
-        matches_saison = matches_saison_courante(competition, monde)
-        if not matches_saison or any(match.resultat is None for match in matches_saison):
-            continue
-
-        classement = calculer_classement(competition.club_ids, matches_saison, cfg)
-        monde.historique.palmares.append(
-            SaisonTerminee(competition_id=competition.id, saison=competition.saison_actuelle, classement_final=classement)
-        )
-        champion = monde.clubs[classement[0].club_id]
-        journal.append(
-            EvenementJour(
-                TypeEvenementJour.FIN_DE_SAISON, f"{champion.nom} est champion de {competition.nom} !",
-                competition_id=competition.id,
+        matches_joues = [m for m in matches_saison_courante(competition, monde) if m.resultat is not None]
+        if matches_joues:
+            classement = calculer_classement(competition.club_ids, matches_joues, cfg)
+            monde.historique.palmares.append(
+                SaisonTerminee(competition_id=competition.id, saison=competition.saison_actuelle, classement_final=classement)
             )
-        )
+            champion = monde.clubs[classement[0].club_id]
+            journal.append(
+                EvenementJour(
+                    TypeEvenementJour.FIN_DE_SAISON, f"{champion.nom} est champion de {competition.nom} !",
+                    competition_id=competition.id,
+                )
+            )
 
         for joueur in monde.joueurs.values():
             if joueur.club_id in competition.club_ids:
@@ -108,15 +128,14 @@ def _relancer_saisons_terminees(monde: Monde, cfg: Config, rng: Random) -> list[
 
         competition.saison_actuelle += 1
         nouveaux_matches, nouvelles_journees = generer_calendrier(
-            competition.club_ids, competition.id, competition.saison_actuelle, monde.prochain_id, monde.date, cfg, rng
+            competition.club_ids, competition.id, competition.saison_actuelle, monde.prochain_id, date_debut_prochaine, cfg, rng
         )
         for match in nouveaux_matches:
             monde.matches[match.id] = match
         competition.calendrier = nouvelles_journees
         monde.prochain_id = max((match.id for match in nouveaux_matches), default=monde.prochain_id - 1) + 1
 
-    if journal:
-        monde.saison = max(competition.saison_actuelle for competition in monde.competitions.values())
+    monde.saison = max(competition.saison_actuelle for competition in monde.competitions.values())
     return journal
 
 
@@ -141,14 +160,19 @@ def avancer_un_jour(monde: Monde, cfg: Config, rng: Random) -> list[EvenementJou
                 journal.append(EvenementJour(TypeEvenementJour.BLESSURE, f"{joueur.prenom} {joueur.nom} est blessé", joueur_id=joueur.id))
 
     monde.date = monde.date.plus_jours(1)
-    journal += _relancer_saisons_terminees(monde, cfg, rng)
+    journal += avancer_mercato(monde, cfg, rng)
+    journal += _relancer_saison_au_1er_juillet(monde, cfg, rng)
     return journal
 
 
-def avancer_jusqua_journee(monde: Monde, cfg: Config, rng: Random, limite_jours: int = 30) -> list[EvenementJour]:
+def avancer_jusqua_journee(monde: Monde, cfg: Config, rng: Random, limite_jours: int = 120) -> list[EvenementJour]:
     """Ticks days until at least one match was played somewhere, or
-    `limite_jours` is reached (every competition's calendar exhausted —
-    otherwise this would loop forever).
+    `limite_jours` is reached. Needed even outside a truly indefinite
+    gap: the close season between a competition's last match (~April/May
+    with the configured fixture spacing) and the next one's kickoff
+    (mid-August, `_relancer_saison_au_1er_juillet`) is itself ~100 days
+    with nothing to play — `limite_jours` defaults comfortably above
+    that so one call still reaches the next real matchday.
     """
     journal: list[EvenementJour] = []
     for _ in range(limite_jours):

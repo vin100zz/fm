@@ -20,9 +20,19 @@ def note_meilleur_onze(effectif: list[Joueur], formation: str, cfg: Config) -> f
     return sum(note_globale(position.joueur, cfg.attributs) for position in onze) / len(onze)
 
 
-def utilite(joueur: Joueur, club: Club, effectif: list[Joueur], date_actuelle: Date, cfg: Config) -> float:
+def utilite(
+    joueur: Joueur, club: Club, effectif: list[Joueur], date_actuelle: Date, cfg: Config, sans: float | None = None
+) -> float:
+    """`sans` (the squad's best-XI rating without `joueur`) is
+    independent of which candidate is being evaluated — a caller
+    scoring many candidates against the same `effectif` (e.g.
+    core/world/mercato.py's shortlist search) can compute it once and
+    pass it in, instead of paying for a `note_meilleur_onze` call per
+    candidate that would always return the same number.
+    """
     avec = note_meilleur_onze([*effectif, joueur], club.formation_preferee, cfg)
-    sans = note_meilleur_onze(effectif, club.formation_preferee, cfg)
+    if sans is None:
+        sans = note_meilleur_onze(effectif, club.formation_preferee, cfg)
     brute = avec - sans
 
     ajustement = _ajustement_personnalite(joueur, club, date_actuelle, cfg)

@@ -81,7 +81,7 @@ def decision_renouvellement(
         )
 
     salaire_demande = round(salaire_attendu(joueur, date_actuelle, cfg) * (1 + cfg_c.facteur_ego * _ego(joueur, cfg)))
-    duree_annees = _duree_par_age(joueur.date_naissance.age_a(date_actuelle), cfg_c)
+    duree_annees = duree_par_age(joueur.date_naissance.age_a(date_actuelle), cfg_c)
 
     masse_salariale_sans = sum(
         autre.contrat.salaire_hebdo for autre in effectif if autre.contrat is not None and autre.id != joueur.id
@@ -106,7 +106,10 @@ def _ego(joueur: Joueur, cfg: Config) -> float:
     return min(max((note_globale(joueur, cfg.attributs) - 50) / 50, 0.0), 1.0)
 
 
-def _duree_par_age(age: int, cfg_c: ContratsConfig) -> int:
+def duree_par_age(age: int, cfg_c: ContratsConfig) -> int:
+    """Public: also used by core/ai/mercato.py for a freshly-signed
+    transfer contract, not just a renewal.
+    """
     for palier in sorted(cfg_c.duree_proposee_par_age, key=lambda p: p.age_max):
         if age <= palier.age_max:
             return palier.annees

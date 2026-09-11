@@ -91,15 +91,18 @@ Protocol ne coûte rien aujourd'hui ; le jour d'une deuxième compétition
 (coupe), formaliser un vrai Protocol redeviendra utile.
 
 `appliquer_fin_saison` est **partiellement** implémenté (ajouté après
-l'étape 9, voir "Fin de saison" dans `docs/ui.md`) :
-`core/world/saison.py::_relancer_saisons_terminees` détecte la fin de
-saison d'une compétition (tous ses matchs de la `saison` en cours ont un
-résultat — indépendamment par compétition, elles ne finissent pas toutes
-le même jour), archive le classement final dans
-`Monde.historique.palmares` et relance un calendrier pour les mêmes
-`club_ids`. Ça ne produit pas de vrai `EvenementSaison` typé (le journal
-du jour, `EvenementJour`, gagne juste un type `FIN_DE_SAISON` de plus) et
-**aucune promotion/relégation** — le périmètre convenu excluait
+l'étape 9, précisé le même jour — une saison par an, 1er juillet au 30
+juin, sur demande explicite — voir "Fin de saison" dans `docs/ui.md`) :
+`core/world/saison.py::_relancer_saison_au_1er_juillet` bascule toutes
+les compétitions ensemble le jour où `monde.date` franchit le 1er
+juillet (pas indépendamment quand le calendrier de chacune s'épuise —
+elles ne finissent pas toutes de jouer le même jour, mais la bascule
+administrative est désormais commune), archive le classement final de
+chacune dans `Monde.historique.palmares` et relance un calendrier pour
+les mêmes `club_ids`, à partir de la mi-août suivante. Ça ne produit pas
+de vrai `EvenementSaison` typé (le journal du jour, `EvenementJour`,
+gagne juste un type `FIN_DE_SAISON` de plus) et **aucune
+promotion/relégation** — le périmètre convenu excluait
 explicitement ce second morceau, qui reste à faire.
 
 ### RegleTransfert

@@ -1,6 +1,7 @@
 from random import Random
 
 from core.config import Config
+from core.domain.date import Date
 from core.domain.etat_joueur import Suspension
 from core.domain.journal import TypeEvenementJour
 from core.domain.poste import Poste
@@ -90,34 +91,66 @@ def test_avancer_jusqua_journee_retourne_des_resultats(cfg: Config) -> None:
     assert any(e.type is TypeEvenementJour.RESULTAT for e in journal)
 
 
-def _jouer_jusqua_fin_de_saison(monde, cfg: Config, rng: Random, limite_jours: int = 60) -> list:
+def _jouer_toute_la_saison(monde, cfg: Config, rng: Random, competition, limite_jours: int = 90) -> None:
+    """Joue jusqu'à ce que tous les matchs de la saison en cours de
+    `competition` aient un résultat — mais, depuis que la saison ne
+    bascule plus qu'au 1er juillet (voir `_relancer_saison_au_1er_juillet`),
+    ça ne déclenche plus rien tout seul : le calendrier reste simplement
+    épuisé jusqu'à la prochaine bascule.
+    """
     for _ in range(limite_jours):
-        journal = avancer_un_jour(monde, cfg, rng)
-        fins = [e for e in journal if e.type is TypeEvenementJour.FIN_DE_SAISON]
-        if fins:
-            return fins
-    raise AssertionError("aucune fin de saison detectee dans la limite de jours")
+        avancer_un_jour(monde, cfg, rng)
+        matches = matches_saison_courante(competition, monde)
+        if matches and all(m.resultat is not None for m in matches):
+            return
+    raise AssertionError("saison non terminee dans la limite de jours")
+
+
+def _sauter_au_1er_juillet_suivant(monde, cfg: Config, rng: Random) -> list:
+    """Place `monde.date` la veille du prochain 1er juillet (celui de
+    l'an prochain si on l'a déjà dépassé cette année) puis avance d'un
+    jour, pour déclencher `_relancer_saison_au_1er_juillet` sans avoir à
+    boucler jour par jour sur tout le creux estival (~100 jours).
+    """
+    annee = monde.date.annee if monde.date < Date(monde.date.annee, 7, 1) else monde.date.annee + 1
+    monde.date = Date(annee, 6, 30)
+    return avancer_un_jour(monde, cfg, rng)
 
 
 class TestFinDeSaison:
-    def test_relance_une_nouvelle_saison_une_fois_le_calendrier_termine(self, cfg: Config) -> None:
+    def test_relance_une_nouvelle_saison_le_1er_juillet(self, cfg: Config) -> None:
         monde, competition = _petit_monde()
         initialiser_saison(monde, cfg, Random(1))
         rng = Random(1)
+        _jouer_toute_la_saison(monde, cfg, rng, competition)
 
-        fins = _jouer_jusqua_fin_de_saison(monde, cfg, rng)
+        journal = _sauter_au_1er_juillet_suivant(monde, cfg, rng)
 
+        assert monde.date == Date(monde.date.annee, 7, 1)
+        fins = [e for e in journal if e.type is TypeEvenementJour.FIN_DE_SAISON]
         assert len(fins) == 1
         assert fins[0].competition_id == competition.id
         assert competition.saison_actuelle == 2
         assert monde.saison == 2
 
-    def test_archive_le_classement_final_dans_le_palmares(self, cfg: Config) -> None:
+    def test_ne_bascule_pas_avant_le_1er_juillet_meme_calendrier_epuise(self, cfg: Config) -> None:
         monde, competition = _petit_monde()
         initialiser_saison(monde, cfg, Random(1))
         rng = Random(1)
 
-        _jouer_jusqua_fin_de_saison(monde, cfg, rng)
+        _jouer_toute_la_saison(monde, cfg, rng, competition)
+
+        assert competition.saison_actuelle == 1
+        assert monde.historique.palmares == []
+        assert monde.date.mois != 7 or monde.date.jour != 1
+
+    def test_archive_le_classement_final_dans_le_palmares(self, cfg: Config) -> None:
+        monde, competition = _petit_monde()
+        initialiser_saison(monde, cfg, Random(1))
+        rng = Random(1)
+        _jouer_toute_la_saison(monde, cfg, rng, competition)
+
+        _sauter_au_1er_juillet_suivant(monde, cfg, rng)
 
         assert len(monde.historique.palmares) == 1
         saison_archivee = monde.historique.palmares[0]
@@ -126,17 +159,20 @@ class TestFinDeSaison:
         assert {ligne.club_id for ligne in saison_archivee.classement_final} == set(competition.club_ids)
         assert saison_archivee.champion_id == saison_archivee.classement_final[0].club_id
 
-    def test_genere_un_nouveau_calendrier_pour_les_memes_clubs(self, cfg: Config) -> None:
+    def test_genere_un_nouveau_calendrier_pour_les_memes_clubs_a_partir_d_aout(self, cfg: Config) -> None:
         monde, competition = _petit_monde()
         initialiser_saison(monde, cfg, Random(1))
         rng = Random(1)
+        _jouer_toute_la_saison(monde, cfg, rng, competition)
 
-        _jouer_jusqua_fin_de_saison(monde, cfg, rng)
+        _sauter_au_1er_juillet_suivant(monde, cfg, rng)
 
         nouveaux_matches = matches_saison_courante(competition, monde)
         assert len(nouveaux_matches) == 4 * 3  # 4 clubs, aller-retour — memes club_ids, pas de promotion/relegation
         assert all(m.resultat is None for m in nouveaux_matches)
         assert all(m.saison == 2 for m in nouveaux_matches)
+        premier_match = min(nouveaux_matches, key=lambda m: m.date)
+        assert (premier_match.date.mois, premier_match.date.jour) == (cfg.monde.saison.debut_mois, cfg.monde.saison.debut_jour)
         assert {c.id for c in monde.clubs.values() if c.id in competition.club_ids} == set(competition.club_ids)
 
     def test_reinitialise_le_cumul_de_cartons_jaunes(self, cfg: Config) -> None:
@@ -145,8 +181,9 @@ class TestFinDeSaison:
         joueur = next(j for j in monde.joueurs.values() if j.club_id in competition.club_ids)
         joueur.cartons_jaunes_saison = 4
         rng = Random(1)
+        _jouer_toute_la_saison(monde, cfg, rng, competition)
 
-        _jouer_jusqua_fin_de_saison(monde, cfg, rng)
+        _sauter_au_1er_juillet_suivant(monde, cfg, rng)
 
         assert joueur.cartons_jaunes_saison == 0
 

@@ -27,6 +27,11 @@ def _ecrire_jeu_de_donnees(dossier: Path, clubs: list[dict[str, str]], joueurs: 
     _ecrire_csv(dossier / "players.csv", joueurs)
 
 
+def _compter_lignes(chemin: Path) -> int:
+    with chemin.open(encoding="cp1252", newline="") as fichier:
+        return sum(1 for _ in csv.reader(fichier, **DIALECTE)) - 1  # header
+
+
 def test_monde_minimal_18_joueurs_dans_lunique_club_actif(tmp_path: Path, cfg: Config) -> None:
     club_actif = une_ligne_club(**{"Unique ID": "1", "Division ID": "11"})
     club_dormant = une_ligne_club(**{"Unique ID": "2", "Division ID": "999999", "Nation": "Kenya"})
@@ -100,8 +105,15 @@ class TestImportReel:
         assert len(monde.competitions) == 5
         for competition in cfg.monde.competitions_simulees:
             assert len(monde.competitions[competition.division_id].club_ids) == competition.nb_clubs
-        assert len(monde.clubs) > 20_000
-        assert len(monde.joueurs) > 30_000
+        # Proportional to data/*.csv rather than a fixed threshold (2026-09-11):
+        # the user may work off a deliberately downsized data/ (see
+        # docs/modele-donnees.md's "club_id orphelin"), so this only checks
+        # that almost every row loaded — not that the shipped volumes are
+        # the ~26 000 clubs / ~32 000 joueurs from CLAUDE.md specifically.
+        nb_lignes_clubs = _compter_lignes(dossier_donnees / "clubs.csv")
+        nb_lignes_joueurs = _compter_lignes(dossier_donnees / "players.csv")
+        assert len(monde.clubs) > 0.9 * nb_lignes_clubs
+        assert len(monde.joueurs) > 0.9 * nb_lignes_joueurs
         # warnings are expected (real data, provisional synthesis) — just
         # confirm they don't silently disappear
         assert isinstance(avertissements, list)

@@ -1,5 +1,27 @@
 # Interface
 
+## Boucle de mercato (2026-09-11, ajouté après l'étape 9)
+
+Implémenté : `core/world/mercato.py::tour_mercato`, appelé depuis
+`avancer_un_jour` chaque jour de fenêtre été/hiver — voir "Boucle de
+mercato" dans `docs/ia-gestion.md` pour le détail (convergence des
+négociations, garde-fous de budget, un vrai bug de convergence trouvé et
+corrigé dans `repondre_offre`). Les transferts effectifs apparaissent
+maintenant :
+
+- dans le journal du jour (`TypeEvenementJour.TRANSFERT`) ;
+- dans `Monde.historique.transferts` (nouveau champ `saison` sur
+  `TransfertHistorique`, comme `Match.saison`) ;
+- via `GET /api/clubs/{id}/transferts` (nouveau) et l'onglet
+  "Transferts" du club côté `web/` — arrivées et départs, montant,
+  club source/cible, avec liens vers la fiche joueur et les clubs
+  impliqués.
+
+Reste non consultable dans l'interface : la liste des négociations *en
+cours* (`Monde.negociations`) — seuls les transferts *conclus*
+apparaissent, conformément à la contrainte v1 observateur (l'utilisateur
+ne pilote ni ne voit les tractations d'un club, seulement leurs résultats).
+
 ## Sauvegarde/chargement (2026-09-11, ajouté après l'étape 9)
 
 Implémenté : `core/world/persistance.py` (`sauvegarder`, `charger`,
@@ -35,32 +57,49 @@ liste déroulante des sauvegardes existantes, boutons Sauvegarder/Charger.
 Charger redemande confirmation (`confirm()` natif) avant d'écraser l'état
 courant.
 
-## Fin de saison (2026-09-11, ajouté après l'étape 9)
+## Fin de saison (2026-09-11, ajouté après l'étape 9 ; règle du 1er
+juillet précisée le même jour, sur demande explicite)
 
-Implémenté : `core/world/saison.py::_relancer_saisons_terminees`, appelé
-à la fin de chaque `avancer_un_jour`. Une compétition "termine" sa saison
-dès que tous ses matchs de la `saison` en cours ont un `resultat` —
-détecté indépendamment par compétition, pas globalement : Ligue 1 (18
-clubs, 34 journées) et La Liga (20 clubs, 38 journées) ne finissent pas
-le même jour même en partant de la même date. À ce moment-là :
+Implémenté : `core/world/saison.py::_relancer_saison_au_1er_juillet`,
+appelé à la fin de chaque `avancer_un_jour`. **Une saison par an, du
+1er juillet N au 30 juin N+1** (règle explicite) : toutes les
+compétitions basculent **ensemble**, le jour où `monde.date` franchit
+le 1er juillet — pas indépendamment dès que le calendrier de chacune
+est épuisé (Ligue 1 à 18 clubs/34 journées et La Liga à 20/38 finissent
+quand même de jouer à des dates différentes, vers avril-mai avec
+l'espacement configuré ; c'est juste que la bascule *administrative* —
+archivage et relance — n'a plus lieu qu'à cette date commune). Au
+1er juillet :
 
-1. le classement final est calculé et archivé dans
-   `Monde.historique.palmares` (`SaisonTerminee`, nouveau type) ;
+1. pour chaque compétition, le classement final des matchs **effectivement
+   joués** est archivé dans `Monde.historique.palmares`
+   (`SaisonTerminee`, nouveau type) — une saison non entièrement jouée à
+   l'échéance se clôture quand même sur ce qui a été disputé, plutôt que
+   de rester bloquée indéfiniment ;
 2. le cumul de cartons jaunes de la saison est remis à zéro pour les
    joueurs des clubs de cette compétition
    (`core.world.etats.suspensions.reinitialiser_saison`, une fonction
    prête depuis l'étape 6 que rien n'appelait encore) ;
-3. un nouveau calendrier est généré immédiatement pour les **mêmes**
-   `club_ids`.
+3. un nouveau calendrier est généré pour les **mêmes** `club_ids`, dont
+   le premier match n'est programmé qu'au prochain
+   `config/monde.json -> saison.debut_mois/jour` (mi-août) — pas le
+   lendemain du 1er juillet — laissant le creux estival où vit la
+   fenêtre de mercato d'été.
 
 **Pas de promotion/relégation** : c'était le périmètre convenu.
 `Competition.appliquer_fin_saison` (docs/architecture.md) n'est donc
 toujours pas implémenté — seule la partie "reconduire la même
-compétition" l'est. `Match` porte maintenant un champ `saison` (sans
-ça, le classement d'une saison 2 se serait mélangé avec celui de la
-saison 1) ; `Competition.saison_actuelle` suit l'édition en cours,
-indépendamment de `Monde.saison` qui n'est qu'un affichage global (le
-maximum des `saison_actuelle` de toutes les compétitions).
+compétition" l'est. `Match` porte un champ `saison` (sans ça, le
+classement d'une saison 2 se mélangerait avec celui de la saison 1) ;
+`Competition.saison_actuelle` suit l'édition en cours (les 5
+compétitions partagent maintenant toujours la même valeur, puisqu'elles
+basculent ensemble) ; `Monde.saison` n'est qu'un affichage global qui
+en reprend le maximum.
+
+`avancer_jusqua_journee` (bouton "avancer à la prochaine journée") a dû
+passer sa limite par défaut de 30 à 120 jours : le creux estival entre
+le dernier match d'une saison (~avril/mai) et le coup d'envoi de la
+suivante (mi-août) dure lui-même ~100 jours sans aucun match programmé.
 
 `GET /api/competitions/{id}/classement` et `.../calendrier` (et
 `GET /api/clubs/{id}/calendrier`) ne montrent que la saison en cours —
@@ -97,7 +136,7 @@ routeurs (`routes_monde.py`, `routes_clubs.py`, `routes_competitions.py`,
 `routes_joueurs.py`, `routes_matches.py`). Tous les endpoints listés en
 "Endpoints" plus bas sans mention "non implémenté" fonctionnent contre le vrai jeu de données
 (32 000 joueurs, 96 clubs actifs) — vérifié à la fois par
-`tests/integration/api/` (21 tests, TestClient) et manuellement au
+`tests/integration/api/` (24 tests, TestClient) et manuellement au
 navigateur (clubs, effectif, calendrier, classement, recherche de
 joueurs, fiche joueur, compte rendu de match, avancée du temps).
 
@@ -110,16 +149,17 @@ entier (voir "Non implémenté" plus bas).
 
 **Non implémenté, documenté plutôt que masqué** :
 
-- **Onglets Budget/Transferts/Historique du club, Statistiques
-  (buteurs/passeurs/notes) et le volet "meilleur buteur par saison" de
-  l'Historique de compétition** : rien n'agrège de séries temporelles
-  (finances, transferts, stats de match par joueur) — seule la
-  démographie, l'état courant et (depuis peu) le palmarès par saison
-  sont suivis. Ajouter ces endpoints suppose d'abord l'agrégation
-  correspondante dans `core/world`, pas seulement une nouvelle vue.
-- **`fin_mercato` sur `POST /api/monde/avancer`** : pas de boucle de
-  mercato à qui faire avancer le temps jusqu'à la fin
-  (`docs/ia-gestion.md`).
+- **Onglets Budget/Historique du club, Statistiques (buteurs/passeurs/notes)
+  et le volet "meilleur buteur par saison" de l'Historique de compétition** :
+  rien n'agrège de séries temporelles (finances dans le temps, stats de
+  match par joueur) — seule la démographie, l'état courant, le palmarès
+  par saison et (depuis peu) les transferts effectifs sont suivis. Ajouter
+  ces endpoints suppose d'abord l'agrégation correspondante dans
+  `core/world`, pas seulement une nouvelle vue.
+- **`fin_mercato` sur `POST /api/monde/avancer`** : la boucle de mercato
+  tourne désormais (voir "Boucle de mercato" plus haut), mais rien ne
+  saute directement à la fin de la fenêtre — seuls `jour`/`journee`
+  existent comme granularité d'avancée.
 - **Promotion/relégation** : voir "Fin de saison" plus haut — la
   saison se relance bien, mais toujours pour les mêmes clubs.
 - **Mode "match en direct"** : `ResultatMatch.evenements` est déjà
@@ -162,6 +202,16 @@ Barre persistante en tête d'application :
 - Boutons : avancer d'un jour, avancer à la prochaine journée de championnat,
   avancer à la fin de la fenêtre de mercato
 - Journal des événements du jour : résultats, transferts, blessures
+
+**Avance automatique (2026-09-11, ajouté)** : bouton "▶ Auto" en bascule
+play/pause — un clic enchaîne "avancer à la prochaine journée" en boucle
+(pause de 900ms entre deux journées, le temps de lire le journal), un
+second clic l'arrête. Purement côté `web/app.js`, aucun endpoint dédié :
+chaque itération est un appel normal à `POST /api/monde/avancer`. Les
+boutons d'avance manuelle sont désactivés pendant que l'auto tourne pour
+éviter un chevauchement de requêtes ; le bouton auto lui-même reste
+cliquable pour permettre l'arrêt. S'arrête aussi tout seul si un appel
+échoue (erreur affichée comme pour un clic manuel).
 
 ## Écrans
 
@@ -236,7 +286,7 @@ GET  /api/clubs/{id}                      en-tête + résumé
 GET  /api/clubs/{id}/effectif
 GET  /api/clubs/{id}/calendrier
 GET  /api/clubs/{id}/finances             — non implémenté
-GET  /api/clubs/{id}/transferts?saison=   — non implémenté
+GET  /api/clubs/{id}/transferts?saison=
 GET  /api/clubs/{id}/historique           — non implémenté
 
 GET  /api/competitions

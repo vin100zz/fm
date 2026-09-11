@@ -31,15 +31,47 @@ async function avancer(jusqu_a) {
     await majBarreTemps();
     afficherJournal(reponse.journal);
     await routerActuel();
+    return true;
   } catch (erreur) {
     alert(erreur.message);
+    return false;
   } finally {
-    boutons.forEach((b) => (b.disabled = false));
+    boutons.forEach((b) => (b.disabled = autoActif && b.id !== "btn-auto-avancer"));
   }
 }
 
 document.getElementById("btn-avancer-jour").addEventListener("click", () => avancer("jour"));
 document.getElementById("btn-avancer-journee").addEventListener("click", () => avancer("journee"));
+
+// Avance automatique : rejoue "avancer à la prochaine journée" en boucle
+// jusqu'à ce qu'on re-clique sur le bouton (play/pause), avec une pause
+// entre deux journées pour laisser le temps de lire le journal.
+const DELAI_AUTO_MS = 900;
+const boutonAuto = document.getElementById("btn-auto-avancer");
+let autoActif = false;
+
+function majBoutonAuto() {
+  boutonAuto.textContent = autoActif ? "⏸ Pause" : "▶ Auto";
+  boutonAuto.classList.toggle("actif", autoActif);
+  document.getElementById("btn-avancer-jour").disabled = autoActif;
+  document.getElementById("btn-avancer-journee").disabled = autoActif;
+}
+
+async function boucleAuto() {
+  while (autoActif) {
+    const succes = await avancer("journee");
+    if (!succes) { autoActif = false; break; }
+    if (!autoActif) break;
+    await new Promise((resolution) => setTimeout(resolution, DELAI_AUTO_MS));
+  }
+  majBoutonAuto();
+}
+
+boutonAuto.addEventListener("click", () => {
+  autoActif = !autoActif;
+  majBoutonAuto();
+  if (autoActif) boucleAuto();
+});
 
 const statutPartie = document.getElementById("statut-partie");
 const champSlot = document.getElementById("slot-partie");

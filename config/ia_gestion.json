@@ -58,8 +58,12 @@
     }
   },
   "mercato": {
+    "_note": "facteur_offre_initiale, tours_negociation_max et tentatives_prospection_max ne sont pas dans docs/ia-gestion.md. facteur_offre_initiale=1.15 est calibre contre repondre_offre() : le seuil vendeur minimal possible est seuil_vendeur_multiplicateur - seuil_vendeur_reduction_surplus = 1.10 (surplus maximal), donc toute offre sous 0.75*1.10=0.825x valeur() est TOUJOURS refusee net (verifie par mesure : 0.85 -> 100% refus). 1.15 se situe dans la zone qui obtient une contre-offre (pas un refus sec) dans la majorite des cas sans deja payer plein tarif. tours_negociation_max est un filet de securite si une contre-offre devient inabordable entre-temps (repondre_offre() converge sinon naturellement en 2 tours : offre -> contre-offre -> ré-offre exactement au montant contré -> accepté). tentatives_prospection_max borne le nombre de besoins examines par tour et par club avant d'abandonner (au-dela de negociations_actives_max) — sans ca, un club dont l'effectif est deja sature (ex. un grand club dont tous les joueurs frolent le plafond d'attribut) reevalue en vain chacun de ses besoins a chaque tour, ce qui a coute ~12s/tour sur les 96 clubs actifs avant ce garde-fou.",
     "negociations_actives_max": 3,
-    "taille_shortlist": 12,
+    "taille_shortlist": 6,
+    "tentatives_prospection_max": 4,
+    "facteur_offre_initiale": 1.15,
+    "tours_negociation_max": 3,
     "seuil_vendeur_multiplicateur": 1.35,
     "seuil_vendeur_reduction_surplus": 0.25,
     "poids_patience_negociation": 0.40,

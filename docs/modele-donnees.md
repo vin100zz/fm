@@ -286,7 +286,6 @@ Refuser de démarrer si, pour un club actif :
 - il n'a aucun gardien
 Refuser de démarrer, quel que soit le statut, si :
 - un attribut sort de [1, 100]
-- un `club_id` de joueur ne correspond à aucun club
 - une compétition déclarée dans `monde.json` n'a pas le bon nombre de clubs
 
 Émettre un avertissement, sans bloquer, si :
@@ -294,6 +293,21 @@ Refuser de démarrer, quel que soit le statut, si :
 - la masse salariale d'un club actif dépasse son plafond
 - une date de fin de contrat est antérieure à la date de début de partie
   (la corriger en la reportant d'un an)
+- un `club_id` de joueur ne correspond à aucun club : le joueur est ignoré
+  (2026-09-11, révisé — voir ci-dessous)
+
+**`club_id` orphelin (2026-09-11)** : à l'origine une erreur bloquante
+(`ImportInvalide`), assouplie en avertissement le jour où l'utilisateur a
+réduit `data/clubs.csv` et `data/players.csv` indépendamment l'un de
+l'autre, laissant 105 des 12 700 joueurs restants référencer un club
+absent du fichier clubs réduit. `importer_monde`
+(`core/world/importation/__init__.py`) ignore désormais ces lignes
+joueur avant même de les construire (un club_id inconnu, hors la valeur
+-1 qui signifie "sans club"), avec un avertissement par joueur ignoré.
+`validation.py::_verifier_references_club` reste en place comme filet
+de sécurité — elle ne devrait plus jamais rien trouver, l'incohérence
+étant filtrée en amont, mais elle continue de protéger contre une
+régression future du pipeline de construction lui-même.
 
 Le rapport de chargement affiche le décompte actif / dormant et la liste des
 compétitions reconnues. C'est le premier écran à consulter en cas de données

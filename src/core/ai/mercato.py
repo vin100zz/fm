@@ -11,6 +11,7 @@ using a flat probabilistic heuristic instead
 (`ia_gestion.mercato.clubs_dormants`).
 """
 
+import math
 from random import Random
 
 from core.ai.besoins import profondeur_utile, projeter_temps_jeu, rang_au_poste
@@ -46,7 +47,15 @@ def repondre_offre(
     if offre.montant >= seuil:
         return Reponse(TypeReponse.ACCEPTE)
     if offre.montant >= seuil * cfg_m.ratio_contre_offre:
-        return Reponse(TypeReponse.CONTRE_OFFRE, contre_montant=round(seuil))
+        # ceil, pas round : un appelant qui ré-offre exactement
+        # contre_montant doit satisfaire offre.montant >= seuil au tour
+        # suivant. round() peut arrondir en dessous de seuil (partie
+        # décimale < 0.5), auquel cas la même contre-offre revient
+        # indéfiniment — trouvé en câblant core/world/mercato.py, qui
+        # suppose cette convergence en 2 tours pour ne pas re-belliciter
+        # indéfiniment (voir tours_negociation_max, un filet de sécurité
+        # pour d'autres cas, pas pour celui-ci).
+        return Reponse(TypeReponse.CONTRE_OFFRE, contre_montant=math.ceil(seuil))
     return Reponse(TypeReponse.REFUSE)
 
 

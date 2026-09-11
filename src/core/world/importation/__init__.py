@@ -39,6 +39,12 @@ def importer_monde(
 
     joueurs = {}
     for ligne in lignes_joueurs:
+        club_id_brut = int(ligne["Club ID"])
+        if club_id_brut != -1 and club_id_brut not in clubs:
+            avertissements.append(
+                f"joueur {ligne['Unique ID']}: club_id {club_id_brut} introuvable dans clubs.csv, joueur ignore"
+            )
+            continue
         joueur = construction.construire_joueur(ligne, cfg, date_debut, rng, avertissements)
         joueurs[joueur.id] = joueur
 

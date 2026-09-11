@@ -1,10 +1,11 @@
 """Long-lived records that outlive a season. See "Historique et
 volumétrie" in docs/modele-donnees.md.
 
-`transferts` from step 2 onward, `palmares` from the end-of-season
-rollover (`core/world/saison.py`) — added exactly as the module
-docstring anticipated: a local, additive change, not a redesign.
-`trajectoires_attributs` still isn't produced by anything.
+`transferts` actually populated from `core/world/mercato.py` (the
+import pipeline only ever seeded it empty); `palmares` from the
+end-of-season rollover (`core/world/saison.py`) — both added exactly as
+this module's docstring long anticipated: a local, additive change, not
+a redesign. `trajectoires_attributs` still isn't produced by anything.
 `SaisonTerminee` only records the champion and final table, not a
 season's top scorer/passer — nothing aggregates per-player match
 events across a season yet (see docs/ui.md).
@@ -23,6 +24,9 @@ class TransfertHistorique:
     club_source_id: int | None
     club_cible_id: int | None
     montant: int
+    # Monde.saison au moment du transfert — filtrage cote API
+    # (GET /api/clubs/{id}/transferts?saison=), comme Match.saison.
+    saison: int = 1
 
 
 @dataclass(frozen=True, slots=True)

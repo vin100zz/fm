@@ -21,14 +21,20 @@ réelles — voir sa docstring) et `AIController`, sa seule implémentation.
 `selection.choisir_composition`/`decider_remplacement` via des paramètres
 optionnels — voir "Remplacements (étape 7)" dans `docs/moteur-match.md`.
 
-**Volontairement hors périmètre** : la boucle de mercato multi-clubs
-(`tour_mercato` en §5 — bilan, shortlist, offres, résolution simultanée pour
-tous les clubs) a besoin d'une orchestration saison/calendrier qui n'existe
-nulle part encore ; seules les primitives pures qu'une telle boucle
-appellerait sont construites ici, testées isolément. Idem pour
-l'orchestration hebdomadaire des renouvellements de contrat (§6) : la
-fonction `decision_renouvellement` existe et est testée, rien ne l'appelle
-encore selon un calendrier.
+**`tour_mercato` (§5) implémenté (2026-09-11, ajouté après l'étape 9)** —
+`core/world/mercato.py`, appelé depuis `core/world/saison.py::avancer_un_jour`
+chaque jour où `monde.date` tombe dans une fenêtre été/hiver
+(`config/monde.json -> mercato`). Bilan, shortlist, offres et résolution
+simultanée pour les 96 clubs actifs, avec les négociations en cours
+persistées sur `Monde.negociations` (nouveau type `Negociation`) d'un tour à
+l'autre. Voir "Boucle de mercato" plus bas pour le détail (convergence en
+2 tours, garde-fous de budget/masse salariale, ce qui reste hors périmètre —
+agents libres, renouvellements, démarchage par les clubs dormants).
+
+**Toujours hors périmètre** : l'orchestration hebdomadaire des
+renouvellements de contrat (§6) — la fonction `decision_renouvellement`
+existe et est testée, rien ne l'appelle encore selon un calendrier (contrairement
+à §5, désormais appelé depuis `avancer_un_jour`).
 
 **Formules non données par ce document, tranchées pendant l'implémentation**
 (chacune documentée dans le docstring de sa fonction) :
@@ -161,6 +167,52 @@ en cinq saisons. Un club ne peut pas signer si le nouveau salaire fait dépasser
 le plafond — il doit vendre d'abord.
 
 ## 5. Boucle de mercato
+
+**Implémenté** (2026-09-11) dans `core/world/mercato.py::tour_mercato`,
+appelé une fois par jour de fenêtre depuis `avancer_un_jour`
+(`config/monde.json -> mercato.tours_par_jour`, actuellement 1). Suit les
+trois phases ci-dessous à la lettre, avec quelques écarts pratiques :
+
+- **Shortlist bornée, pas exhaustive** : chaque club trie les candidats au
+  poste manquant par proximité à son niveau cible, ne calcule l'utilité
+  marginale réelle (coûteuse — un `meilleure_affectation` par candidat) que
+  sur les `taille_shortlist` plus proches, et abandonne un besoin après
+  `tentatives_prospection_max` échecs plutôt que d'épuiser toute la liste.
+  Sans ça, un tour sur les 96 clubs actifs prenait ~15s (mesuré) au lieu de
+  ~1.2s — un club dont l'effectif est déjà saturé (proche du plafond
+  d'attribut) réévaluait en vain chacun de ses besoins à chaque tour.
+- **La négociation converge en au plus 2 tours** : `repondre_offre` est une
+  fonction pure du montant offert, donc ré-offrir exactement le montant
+  contré reproduit le même seuil et le franchit. `facteur_offre_initiale`
+  (1.15, config) est calé pour obtenir une contre-offre (pas un refus sec)
+  dans la majorité des cas sans payer plein tarif d'entrée — le seuil vendeur
+  le plus bas possible étant 1.10x `valeur()` (surplus maximal), toute offre
+  sous 0.825x `valeur()` est refusée net, vérifié par mesure.
+- **Bug trouvé en câblant cette boucle** : `repondre_offre` calculait
+  `contre_montant = round(seuil)`, qui peut arrondir *en dessous* de
+  `seuil` (partie décimale < 0.5) — ré-offrir ce montant échouait alors à
+  nouveau contre le même seuil non arrondi, empêchant toute convergence.
+  Corrigé en `math.ceil(seuil)` : une contre-offre est désormais toujours
+  au moins égale au seuil qui l'a produite.
+- **Garde-fous de budget** appliqués aux deux endroits où docs les
+  implique sans les détailler : une offre (nouvelle ou relancée après
+  contre-offre) doit tenir dans `budget_transfert` restant du club ET ne
+  pas faire dépasser `masse_salariale_max` en ajoutant le salaire proposé
+  à la masse salariale actuelle de l'effectif (`garde_fous.plafond_salarial_strict`,
+  §7). Les offres simultanées d'un même club sur plusieurs négociations ce
+  tour sont provisionnées ensemble (pas juste vérifiées une à une) pour ne
+  pas dépasser le budget en cumulant plusieurs accords le même tour.
+  Le transfert conclu déduit le montant du `budget_transfert` de
+  l'acheteur et le crédite au `solde` du vendeur (si actif) — approximation
+  du `ventes_realisees` de la formule de budget (§4), qui suppose un
+  nouveau calcul de `revenus_saison` non modélisé ici.
+- **Hors périmètre, documenté dans `core/world/mercato.py`** : les clubs
+  dormants ne démarchent jamais (`clubs_dormants.probabilite_demarchage_par_fenetre`
+  existe en config, inutilisée) — seule la réponse réactive
+  (`repondre_offre_dormant`) est branchée ; pas d'agents libres (§ suivant,
+  aucun contrat n'expire jamais) ; pas de prêt, clause libératoire, ni
+  d'échange (`TransfertSec` — argent comptant seulement, voir
+  `RegleTransfert` dans `docs/architecture.md`).
 
 Deux fenêtres : été (6 semaines) et hiver (3 semaines). La fenêtre tourne par
 **tours de jour**.

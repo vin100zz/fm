@@ -33,6 +33,7 @@ export const api = {
   club: (id) => requete(`/api/clubs/${id}`),
   effectifClub: (id) => requete(`/api/clubs/${id}/effectif`),
   calendrierClub: (id) => requete(`/api/clubs/${id}/calendrier`),
+  transfertsClub: (id) => requete(`/api/clubs/${id}/transferts`),
 
   competitions: () => requete("/api/competitions"),
   classement: (id) => requete(`/api/competitions/${id}/classement`),

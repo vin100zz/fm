@@ -11,6 +11,7 @@ class TypeEvenementJour(Enum):
     RESULTAT = "resultat"
     BLESSURE = "blessure"
     FIN_DE_SAISON = "fin_de_saison"
+    TRANSFERT = "transfert"
 
 
 @dataclass(frozen=True, slots=True)

@@ -14,6 +14,7 @@ from core.domain.journal import EvenementJour, TypeEvenementJour
 from core.domain.joueur import Joueur
 from core.domain.match import Evenement, Journee, Match, ResultatMatch, StatsEquipe, TypeEvenement
 from core.domain.monde import Monde
+from core.domain.negociation import Negociation
 from core.domain.offre import Offre, Reponse, TypeReponse
 from core.domain.poste import Poste
 from core.domain.remplacement import Remplacement
@@ -38,6 +39,7 @@ __all__ = [
     "LigneClassement",
     "Match",
     "Monde",
+    "Negociation",
     "Offre",
     "PersonnaliteClub",
     "Poste",

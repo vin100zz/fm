@@ -137,6 +137,30 @@ def test_avancer_jusqua_journee_produit_un_match_consultable(client: TestClient)
     assert match["buts_dom"] >= 0 and match["buts_ext"] >= 0
 
 
+def test_transferts_club_reflete_les_mouvements_reels(client: TestClient) -> None:
+    # A ce point, plusieurs avancer_un_jour/journee ont deja tourne
+    # pendant la fenetre d'ete (10/08 en fait partie) : le mercato a eu
+    # l'occasion de produire de vrais transferts sur les 96 clubs actifs.
+    club_id = client.get("/api/clubs", params={"statut": "actif", "recherche": "Paris SG"}).json()["items"][0]["id"]
+    reponse = client.get(f"/api/clubs/{club_id}/transferts")
+    assert reponse.status_code == 200
+    for transfert in reponse.json():
+        assert transfert["sens"] in ("arrivee", "depart")
+        assert club_id in (transfert["club_source_id"], transfert["club_cible_id"])
+        assert transfert["montant"] > 0
+
+
+def test_transferts_club_filtre_par_saison_inexistante(client: TestClient) -> None:
+    club_id = client.get("/api/clubs", params={"statut": "actif", "recherche": "Paris SG"}).json()["items"][0]["id"]
+    reponse = client.get(f"/api/clubs/{club_id}/transferts", params={"saison": 9999})
+    assert reponse.status_code == 200
+    assert reponse.json() == []
+
+
+def test_transferts_club_inconnu_404(client: TestClient) -> None:
+    assert client.get("/api/clubs/999999999999/transferts").status_code == 404
+
+
 def test_match_inconnu_404(client: TestClient) -> None:
     assert client.get("/api/matches/999999999999").status_code == 404
 

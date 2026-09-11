@@ -63,6 +63,8 @@ body {
 
 #barre-temps button:hover { background: #4a5568; }
 #barre-temps button:disabled { opacity: 0.5; cursor: wait; }
+#btn-auto-avancer.actif { background: var(--victoire); border-color: var(--victoire); }
+#btn-auto-avancer.actif:hover { background: #276749; }
 
 #prochaines-echeances { font-size: 0.8rem; color: #cbd5e0; }
 

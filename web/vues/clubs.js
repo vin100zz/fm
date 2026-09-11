@@ -74,6 +74,7 @@ export async function renderDetail(conteneur, id) {
     <div class="onglets">
       <button data-onglet="effectif" class="actif">Effectif</button>
       <button data-onglet="calendrier">Calendrier</button>
+      <button data-onglet="transferts">Transferts</button>
     </div>
     <div id="contenu-onglet"></div>
   `;
@@ -114,12 +115,36 @@ export async function renderDetail(conteneur, id) {
     });
   }
 
+  async function afficherTransferts() {
+    const transferts = await api.transfertsClub(id);
+    if (!transferts.length) {
+      contenuOnglet.innerHTML = "<p>Aucun transfert cette saison.</p>";
+      return;
+    }
+    const colonnes = [
+      { cle: "date", libelle: "Date" },
+      { cle: "sens", libelle: "Sens", format: (v) => (v === "arrivee" ? "↘ Arrivée" : "↗ Départ") },
+      { cle: "joueur_nom", libelle: "Joueur", format: (v, l) => `<a href="#/joueurs/${l.joueur_id}">${echappe(v)}</a>` },
+      {
+        cle: "club_source_nom", libelle: "De",
+        format: (v, l) => (l.club_source_id ? `<a href="#/clubs/${l.club_source_id}">${echappe(v)}</a>` : "—"),
+      },
+      {
+        cle: "club_cible_nom", libelle: "Vers",
+        format: (v, l) => (l.club_cible_id ? `<a href="#/clubs/${l.club_cible_id}">${echappe(v)}</a>` : "—"),
+      },
+      { cle: "montant", libelle: "Montant", format: (v) => `${v.toLocaleString("fr-FR")} €` },
+    ];
+    tableauTriable(contenuOnglet, colonnes, transferts, { triInitial: "date", sensInitial: true });
+  }
+
   conteneur.querySelectorAll(".onglets button").forEach((btn) => {
     btn.addEventListener("click", () => {
       conteneur.querySelectorAll(".onglets button").forEach((b) => b.classList.remove("actif"));
       btn.classList.add("actif");
       if (btn.dataset.onglet === "effectif") afficherEffectif();
-      else afficherCalendrier();
+      else if (btn.dataset.onglet === "calendrier") afficherCalendrier();
+      else afficherTransferts();
     });
   });
 

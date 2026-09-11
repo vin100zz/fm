@@ -1,11 +1,13 @@
 """GET /api/clubs/* — "Club" screen in docs/ui.md.
 
-Only the Effectif, Calendrier tabs and the header are built. Budget,
-Transferts and Historique need club finance history, transfer records
-and past standings that nothing tracks yet — deferred, not stubbed.
+Effectif, Calendrier, Transferts and the header are built. Budget and
+Historique still need data nothing tracks yet (finance history over
+time, past standings for a dormant-adjacent club) — deferred, not
+stubbed.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from api.etat_serveur import EtatServeur, obtenir_etat
 from api.pagination import Page, paginer
@@ -24,6 +26,19 @@ from core.world.classement import calculer_classement
 from core.world.saison import matches_saison_courante
 
 routeur = APIRouter()
+
+
+class VueTransfert(BaseModel):
+    date: str
+    joueur_id: int
+    joueur_nom: str
+    club_source_id: int | None
+    club_source_nom: str | None
+    club_cible_id: int | None
+    club_cible_nom: str | None
+    montant: int
+    saison: int
+    sens: str  # "arrivee" | "depart", relatif au club consulte
 
 
 @routeur.get("", response_model=Page[VueClubResume])
@@ -83,6 +98,37 @@ def calendrier_club(club_id: int, etat_serveur: EtatServeur = Depends(obtenir_et
         key=lambda m: m.journee,
     )
     return [vue_match_resume(m, monde.clubs[m.domicile_id], monde.clubs[m.exterieur_id]) for m in matches]
+
+
+@routeur.get("/{club_id}/transferts", response_model=list[VueTransfert])
+def transferts_club(
+    club_id: int, saison: int | None = None, etat_serveur: EtatServeur = Depends(obtenir_etat)
+) -> list[VueTransfert]:
+    _recuperer_club(club_id, etat_serveur)
+    monde = etat_serveur.monde
+
+    transferts = [
+        t for t in monde.historique.transferts
+        if club_id in (t.club_source_id, t.club_cible_id) and (saison is None or t.saison == saison)
+    ]
+    transferts.sort(key=lambda t: t.date, reverse=True)
+
+    vues = []
+    for t in transferts:
+        joueur = monde.joueurs.get(t.joueur_id)
+        club_source = monde.clubs.get(t.club_source_id) if t.club_source_id is not None else None
+        club_cible = monde.clubs.get(t.club_cible_id) if t.club_cible_id is not None else None
+        vues.append(
+            VueTransfert(
+                date=str(t.date), joueur_id=t.joueur_id,
+                joueur_nom=f"{joueur.prenom} {joueur.nom}".strip() if joueur else "?",
+                club_source_id=t.club_source_id, club_source_nom=club_source.nom if club_source else None,
+                club_cible_id=t.club_cible_id, club_cible_nom=club_cible.nom if club_cible else None,
+                montant=t.montant, saison=t.saison,
+                sens="arrivee" if t.club_cible_id == club_id else "depart",
+            )
+        )
+    return vues
 
 
 def _recuperer_club(club_id: int, etat_serveur: EtatServeur) -> Club:

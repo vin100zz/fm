@@ -81,6 +81,9 @@ class ClubsDormantsConfig:
 class MercatoIAConfig:
     negociations_actives_max: int
     taille_shortlist: int
+    tentatives_prospection_max: int
+    facteur_offre_initiale: float
+    tours_negociation_max: int
     seuil_vendeur_multiplicateur: float
     seuil_vendeur_reduction_surplus: float
     poids_patience_negociation: float
