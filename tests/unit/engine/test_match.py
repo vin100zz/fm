@@ -4,13 +4,44 @@ from random import Random
 
 import pytest
 
+from core.ai.controller import AIController
 from core.config import Config
+from core.domain.attributs import Attributs
 from core.domain.date import Date
 from core.domain.match import TypeEvenement
 from core.domain.monde import Monde
-from core.engine.equipe import composition_depuis_effectif
+from core.domain.poste import Poste
+from core.engine.equipe import Equipe, PositionOnze, composition_depuis_effectif
 from core.engine.match import MoteurPossession
 from core.world.importation import importer_monde
+from tests.unit.world.fabriques_domaine import des_attributs, un_joueur
+
+POSTES_442 = [
+    Poste.GB, Poste.DL, Poste.DC, Poste.DC, Poste.DR,
+    Poste.AILG, Poste.MC, Poste.MC, Poste.AILD, Poste.BU, Poste.BU,
+]
+
+
+def _uniforme(note: int) -> Attributs:
+    return des_attributs(**{champ: note for champ in Attributs.__dataclass_fields__})
+
+
+def _equipe_442(club_id: int, fatigue: float) -> Equipe:
+    onze = tuple(
+        PositionOnze(
+            poste=poste,
+            joueur=un_joueur(id=club_id * 100 + i, poste=poste, club_id=club_id, attributs=_uniforme(60), fatigue=fatigue),
+        )
+        for i, poste in enumerate(POSTES_442)
+    )
+    return Equipe(club_id=club_id, force_attaque=60.0, force_defense=60.0, onze=onze, formation="4-4-2", hauteur_bloc=0.0)
+
+
+def _banc(club_id: int, taille: int, fatigue: float = 1.0) -> tuple:
+    return tuple(
+        un_joueur(id=club_id * 1000 + i, poste=POSTES_442[i % len(POSTES_442)], club_id=club_id, attributs=_uniforme(55), fatigue=fatigue)
+        for i in range(taille)
+    )
 
 
 @pytest.fixture(scope="module")
@@ -85,3 +116,44 @@ class TestMoteurPossession:
             dom = composition_depuis_effectif(dom_club.id, monde.joueurs, dom_club.formation_preferee, 0.0, cfg)
             ext = composition_depuis_effectif(ext_club.id, monde.joueurs, ext_club.formation_preferee, 0.0, cfg)
             moteur.simuler(dom, ext, cfg, Random(i))
+
+
+class TestRemplacements:
+    """`bancs`/`controleurs` are optional (step 7) — omitting them keeps
+    every prior calibration/benchmark call unaffected (see the other
+    tests in this file, none of which pass them).
+    """
+
+    def test_omis_aucun_evenement_de_remplacement(self, cfg: Config) -> None:
+        dom = _equipe_442(1, fatigue=0.1)
+        ext = _equipe_442(2, fatigue=0.1)
+
+        resultat = MoteurPossession().simuler(dom, ext, cfg, Random(1))
+
+        assert not any(e.type is TypeEvenement.REMPLACEMENT for e in resultat.evenements)
+
+    def test_joueur_fatigue_est_remplace(self, cfg: Config) -> None:
+        dom = _equipe_442(1, fatigue=0.1)  # tout le monde sous le seuil de declenchement
+        ext = _equipe_442(2, fatigue=1.0)
+        banc_dom = _banc(1, taille=5, fatigue=1.0)
+
+        resultat = MoteurPossession().simuler(
+            dom, ext, cfg, Random(1), bancs={True: banc_dom}, controleurs={True: AIController()}
+        )
+
+        remplacements = [e for e in resultat.evenements if e.type is TypeEvenement.REMPLACEMENT]
+        assert remplacements
+        assert all(e.joueur_secondaire_id in {p.joueur.id for p in dom.onze} for e in remplacements)
+        assert all(e.joueur_id in {j.id for j in banc_dom} for e in remplacements)
+
+    def test_respecte_le_maximum_de_remplacements(self, cfg: Config) -> None:
+        dom = _equipe_442(1, fatigue=0.1)
+        ext = _equipe_442(2, fatigue=1.0)
+        banc_dom = _banc(1, taille=cfg.monde.regles_match.remplacements_max + 3, fatigue=1.0)
+
+        resultat = MoteurPossession().simuler(
+            dom, ext, cfg, Random(1), bancs={True: banc_dom}, controleurs={True: AIController()}
+        )
+
+        remplacements = [e for e in resultat.evenements if e.type is TypeEvenement.REMPLACEMENT]
+        assert len(remplacements) <= cfg.monde.regles_match.remplacements_max

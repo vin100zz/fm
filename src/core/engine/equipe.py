@@ -49,12 +49,12 @@ def equipe_depuis_effectif(club_id: int, joueurs: dict[int, Joueur], cfg: Config
 
     return Equipe(
         club_id=club_id,
-        force_attaque=_force_ponderee(meilleurs, cfg.implications.vertical_attaque, cfg),
-        force_defense=_force_ponderee(meilleurs, cfg.implications.vertical_defense, cfg),
+        force_attaque=force_ponderee(meilleurs, cfg.implications.vertical_attaque, cfg),
+        force_defense=force_ponderee(meilleurs, cfg.implications.vertical_defense, cfg),
     )
 
 
-def _force_ponderee(meilleurs: list[Joueur], poids_par_poste: dict[str, list[float]], cfg: Config) -> float:
+def force_ponderee(meilleurs: list[Joueur], poids_par_poste: dict[str, list[float]], cfg: Config) -> float:
     poids_total = 0.0
     somme_ponderee = 0.0
     for joueur in meilleurs:
@@ -67,34 +67,44 @@ def _force_ponderee(meilleurs: list[Joueur], poids_par_poste: dict[str, list[flo
     return somme_ponderee / poids_total
 
 
-def composition_depuis_effectif(
-    club_id: int, joueurs: dict[int, Joueur], formation: str, hauteur_bloc: float, cfg: Config
-) -> Equipe:
-    """Fill each formation slot with the best available player for it
+def meilleure_affectation(candidats: list[Joueur], formation: str, cfg: Config) -> list[PositionOnze]:
+    """Fill each formation slot with the best remaining candidate
     (note_globale, discounted by malus_hors_poste if out of position).
-    This is deliberately not the real selection AI (docs/ia-gestion.md
-    §8 — fatigue-aware rotation, tactical adjustment): there is no
-    AIController yet (step 7). A club's actual `formation_preferee` is
-    the caller's job to pass in, same for hauteur_bloc.
+    `candidats` need not share a club_id — core/ai/utilite.py evaluates
+    a hypothetical "what if we had this player" squad this way.
     """
     slots = [Poste(code) for code in cfg.formations.formations[formation]]
-    effectif = [joueur for joueur in joueurs.values() if joueur.club_id == club_id]
 
     onze: list[PositionOnze] = []
     deja_choisis: set[int] = set()
     for poste_slot in slots:
-        candidats = [joueur for joueur in effectif if joueur.id not in deja_choisis]
+        restants = [joueur for joueur in candidats if joueur.id not in deja_choisis]
         meilleur = max(
-            candidats,
+            restants,
             key=lambda joueur: note_globale(joueur, cfg.attributs) * malus_hors_poste(joueur, poste_slot, cfg.attributs),
         )
         onze.append(PositionOnze(poste=poste_slot, joueur=meilleur))
         deja_choisis.add(meilleur.id)
+    return onze
+
+
+def composition_depuis_effectif(
+    club_id: int, joueurs: dict[int, Joueur], formation: str, hauteur_bloc: float, cfg: Config
+) -> Equipe:
+    """This is deliberately not the real selection AI (docs/ia-gestion.md
+    §8 — excluding the injured/suspended, fatigue-aware rotation,
+    tactical hauteur de bloc): see core/ai/selection.py for that, now
+    that AIController exists (step 7). Kept as the simple "best XI
+    regardless of fitness" this was built for at step 5 — benchmarks and
+    tests that don't care about squad fitness still use it.
+    """
+    effectif = [joueur for joueur in joueurs.values() if joueur.club_id == club_id]
+    onze = meilleure_affectation(effectif, formation, cfg)
 
     return Equipe(
         club_id=club_id,
-        force_attaque=_force_ponderee([p.joueur for p in onze], cfg.implications.vertical_attaque, cfg),
-        force_defense=_force_ponderee([p.joueur for p in onze], cfg.implications.vertical_defense, cfg),
+        force_attaque=force_ponderee([p.joueur for p in onze], cfg.implications.vertical_attaque, cfg),
+        force_defense=force_ponderee([p.joueur for p in onze], cfg.implications.vertical_defense, cfg),
         onze=tuple(onze),
         formation=formation,
         hauteur_bloc=hauteur_bloc,

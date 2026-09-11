@@ -10,13 +10,22 @@ directly (see "Mutation du monde" in docs/architecture.md) — the one
 exception is a red card's immediate effect on `onze` *within this one
 match*, which isn't persistent state.
 
+Substitutions (step 7) are wired through an optional `bancs`/
+`controleurs` pair on `simuler` — omitted (as every existing
+calibration/benchmark/test call omits them), the match behaves exactly
+as before. When present, each side is evaluated for a substitution at
+`cfg.etats.remplacements.intervalle_evaluation_minutes` intervals via
+`ClubController.decider_remplacement`, the same decision function
+`core/ai/selection.py` exposes.
+
 Deliberately still out of scope (documented, not silently skipped):
 mid-match forme/fatigue dynamics (read once at kickoff; recalculating
-notes_zones at fatigue paliers, per docs, needs that first), player
-substitutions (need AIController.decider_remplacement, step 7),
-in-match injuries (core/world/etats/blessures.py explains why), and
-hauteur de bloc's effect on recovery zone / vulnerability to the
-counter (accepted on Equipe, not yet consumed). A red card still
+notes_zones at fatigue paliers, per docs, needs that first),
+in-match injuries (core/world/etats/blessures.py explains why, and
+means `decider_remplacement`'s injury branch never fires from live
+engine data yet), and hauteur de bloc's effect on recovery zone /
+vulnerability to the counter (accepted on Equipe, not yet consumed).
+A red card still
 weakens a side for real: removing a player from onze and recomputing
 notes_zones lets facteur_densite do the work, exactly as docs
 prescribes — "aucun malus artificiel à ajouter" (the goalkeeper is
@@ -26,8 +35,11 @@ way to put an outfield player in goal instead).
 
 from random import Random
 
+from core.ai.controller import ClubController
 from core.config.modeles.racine import Config
+from core.domain.etat_match import EtatMatch
 from core.domain.geometrie import Couloir, Zone
+from core.domain.joueur import Joueur
 from core.domain.match import Evenement, ResultatMatch, StatsEquipe, TypeEvenement
 from core.engine.cartons import determiner_carton
 from core.engine.chronologie import duree_possession, temps_additionnel
@@ -44,10 +56,13 @@ class _EtatCote:
     (a red card replaces `equipe`/`notes`), unlike the frozen engine types.
     """
 
-    def __init__(self, equipe: Equipe, notes: NotesEquipe) -> None:
+    def __init__(self, equipe: Equipe, notes: NotesEquipe, banc: tuple[Joueur, ...] = ()) -> None:
         self.onze_initial = equipe.onze
         self.equipe = equipe
         self.notes = notes
+        self.banc: list[Joueur] = list(banc)
+        self.remplacements_effectues = 0
+        self.derniere_minute_evaluee = -1
         self.tirs = 0
         self.xg = 0.0
         self.corners = 0
@@ -58,9 +73,21 @@ class _EtatCote:
 
 
 class MoteurPossession:
-    def simuler(self, dom: Equipe, ext: Equipe, cfg: Config, rng: Random) -> ResultatMatch:
+    def simuler(
+        self,
+        dom: Equipe,
+        ext: Equipe,
+        cfg: Config,
+        rng: Random,
+        bancs: dict[bool, tuple[Joueur, ...]] | None = None,
+        controleurs: dict[bool, ClubController] | None = None,
+    ) -> ResultatMatch:
         tables = construire_tables_implication(cfg.implications)
-        etats = {True: _EtatCote(dom, calculer_notes_equipe(dom, tables, cfg)), False: _EtatCote(ext, calculer_notes_equipe(ext, tables, cfg))}
+        bancs = bancs or {}
+        etats = {
+            True: _EtatCote(dom, calculer_notes_equipe(dom, tables, cfg), bancs.get(True, ())),
+            False: _EtatCote(ext, calculer_notes_equipe(ext, tables, cfg), bancs.get(False, ())),
+        }
 
         evenements: list[Evenement] = []
         buts = {True: 0, False: 0}
@@ -80,6 +107,13 @@ class MoteurPossession:
             if t >= (duree_totale if duree_totale is not None else duree_reguliere):
                 break
             minute = min(int(t // 60), 90)
+
+            if controleurs is not None:
+                for cote in (True, False):
+                    if cote in controleurs:
+                        self._evaluer_remplacement(
+                            etats[cote], cote, minute, buts, controleurs[cote], tables, cfg, evenements
+                        )
 
             attaquant, defenseur = etats[cote_attaquant], etats[not cote_attaquant]
             attaquant.possessions += 1
@@ -238,6 +272,74 @@ class MoteurPossession:
             joueur_id: min(max(reference + ajustements.get(joueur_id, 0.0), cfg_note.note_min), cfg_note.note_max)
             for joueur_id in tous_les_joueurs
         }
+
+    @staticmethod
+    def _evaluer_remplacement(
+        etat: "_EtatCote",
+        cote: bool,
+        minute: int,
+        buts: dict[bool, int],
+        controleur: ClubController,
+        tables,
+        cfg: Config,
+        evenements: list[Evenement],
+    ) -> None:
+        """Called once per possession; only actually consults the
+        controller at the configured checkpoints (dedup via
+        `derniere_minute_evaluee`, since several possessions can share a
+        minute) — "évalué chaque intervalle_evaluation_minutes" per
+        docs/etats-joueur.md.
+        """
+        cfg_r = cfg.etats.remplacements
+        if minute < cfg_r.premiere_minute_evaluation or minute == etat.derniere_minute_evaluee:
+            return
+        if (minute - cfg_r.premiere_minute_evaluation) % cfg_r.intervalle_evaluation_minutes != 0:
+            return
+        etat.derniere_minute_evaluee = minute
+
+        etat_match = EtatMatch(
+            minute=minute,
+            buts_pour=buts[cote],
+            buts_contre=buts[not cote],
+            onze_actuel=tuple(position.joueur for position in etat.equipe.onze),
+            banc=tuple(etat.banc),
+            remplacements_effectues=etat.remplacements_effectues,
+        )
+        decision = controleur.decider_remplacement(
+            etat_match, frozenset(etat.jaunes_en_match), cfg.monde.regles_match.remplacements_max, cfg
+        )
+        if decision is None:
+            return
+
+        entrant = next((joueur for joueur in etat.banc if joueur.id == decision.joueur_entrant_id), None)
+        if entrant is None:
+            return
+        onze = tuple(
+            PositionOnze(poste=position.poste, joueur=entrant)
+            if position.joueur.id == decision.joueur_sortant_id
+            else position
+            for position in etat.equipe.onze
+        )
+        if onze == etat.equipe.onze:
+            return
+
+        etat.banc = [joueur for joueur in etat.banc if joueur.id != entrant.id]
+        etat.remplacements_effectues += 1
+        etat.equipe = Equipe(
+            club_id=etat.equipe.club_id,
+            force_attaque=etat.equipe.force_attaque,
+            force_defense=etat.equipe.force_defense,
+            onze=onze,
+            formation=etat.equipe.formation,
+            hauteur_bloc=etat.equipe.hauteur_bloc,
+        )
+        etat.notes = calculer_notes_equipe(etat.equipe, tables, cfg)
+        evenements.append(
+            Evenement(
+                minute, TypeEvenement.REMPLACEMENT, decision.joueur_entrant_id, decision.joueur_sortant_id, None, None,
+                detail=decision.motif,
+            )
+        )
 
     @staticmethod
     def _expulser(etat: "_EtatCote", fauteur: PositionOnze, tables, cfg: Config) -> None:

@@ -11,7 +11,8 @@ perimetre.py or validation.py.
 import math
 from random import Random
 
-from core.config.modeles.ia_gestion import BudgetsConfig, PersonnaliteClubConfig, ValorisationConfig
+from core.ai.budgets import calculer_budget_transfert, calculer_masse_salariale_max, calculer_revenus
+from core.config.modeles.ia_gestion import PersonnaliteClubConfig, ValorisationConfig
 from core.config.modeles.import_donnees import SyntheseAttributsConfig, SyntheseClubConfig
 from core.config.modeles.monde import ConfigMonde
 from core.config.modeles.racine import Config
@@ -44,7 +45,11 @@ def construire_club(ligne: dict[str, str], cfg: Config, rng: Random) -> Club:
 
     reputation = _reputation_depuis_stade(stad_cap, cfg.import_donnees.synthese_club, rng)
     note_centre_formation = _note_centre_formation(reputation, cfg.import_donnees.synthese_club, rng)
-    budget_transfert, masse_salariale_max = _budgets_initiaux(reputation, pays, cfg.ia.budgets)
+    # No classement/solde/ventes yet on day one of a new game: a plain
+    # reputation-based revenue estimate is all calculer_revenus needs.
+    revenus_estimes = calculer_revenus(reputation, pays, classement_precedent=None, cfg=cfg)
+    budget_transfert = calculer_budget_transfert(revenus_estimes, solde=0, ventes_realisees=0, cfg=cfg)
+    masse_salariale_max = calculer_masse_salariale_max(revenus_estimes, cfg)
 
     return Club(
         id=club_id,
@@ -78,15 +83,6 @@ def _note_centre_formation(reputation: int, cfg: SyntheseClubConfig, rng: Random
     base = reputation * cfg.note_centre_formation_facteur_reputation
     bruit = rng.gauss(0.0, cfg.note_centre_formation_bruit_ecart_type)
     return round(min(max(base + bruit, plage.min), plage.max))
-
-
-def _budgets_initiaux(reputation: int, pays: str, cfg: BudgetsConfig) -> tuple[int, int]:
-    revenus = cfg.revenus
-    multiplicateur = revenus.multiplicateur_pays.get(pays, 1.0)
-    revenus_estimes = reputation * revenus.base_par_point_reputation * multiplicateur
-    budget_transfert = round(revenus_estimes * cfg.part_revenus_transfert)
-    masse_salariale_max = round(revenus_estimes * cfg.part_revenus_salaires / cfg.semaines_par_an)
-    return budget_transfert, masse_salariale_max
 
 
 def _tirer_personnalite(cfg: PersonnaliteClubConfig, rng: Random) -> PersonnaliteClub:

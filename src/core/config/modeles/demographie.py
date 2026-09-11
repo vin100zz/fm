@@ -19,8 +19,10 @@ class ProgressionConfig:
 @dataclass(frozen=True, slots=True, config=STRICT)
 class EstimationPotentielConfig:
     bruit_max: float
+    age_debut_convergence: int
     age_convergence: int
     facteur_reputation_observateur: float
+    base_facteur_observateur: float
 
 
 @dataclass(frozen=True, slots=True, config=STRICT)

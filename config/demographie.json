@@ -25,9 +25,12 @@
     "declin_plafonne": false
   },
   "estimation_potentiel": {
+    "_note": "bruit decroit lineairement de bruit_max (a age_debut_convergence) a 0 (a age_convergence). base_facteur_observateur=1.3 est le '1.3' de la formule documentee, pas nomme dans docs/progression-demographie.md.",
     "bruit_max": 22.0,
+    "age_debut_convergence": 15,
     "age_convergence": 23,
-    "facteur_reputation_observateur": 0.5
+    "facteur_reputation_observateur": 0.5,
+    "base_facteur_observateur": 1.3
   },
   "cohorte": {
     "_note": "Dimensionnee sur les sorties reelles, corrigee par la boucle de retroaction",

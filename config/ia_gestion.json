@@ -80,6 +80,7 @@
     }
   },
   "contrats": {
+    "_note": "ratio_salaire_hebdo_sur_valeur derive un salaire hebdomadaire attendu depuis valeur() (~17% de la valeur en salaire annuel, repere usuel du football reel).",
     "evaluation": "hebdomadaire",
     "seuil_satisfaction_negociation": 0.65,
     "mois_avant_fin_declenchant": 12,
@@ -87,6 +88,7 @@
     "poids_temps_de_jeu": 0.40,
     "poids_club": 0.20,
     "facteur_ego": 0.15,
+    "ratio_salaire_hebdo_sur_valeur": 0.00327,
     "duree_proposee_par_age": [
       {"age_max": 23, "annees": 5},
       {"age_max": 28, "annees": 4},
@@ -113,10 +115,13 @@
     "correlation_reputation_agressivite": 0.35
   },
   "selection": {
+    "_note": "score par poste = note_globale^poids_composite * forme^poids_forme * fatigue^poids_fatigue * malus_hors_poste. poids a 1.0 = formule multiplicative simple ; un poids a 0 neutralise ce facteur.",
     "poids_composite": 1.0,
     "poids_forme": 1.0,
     "poids_fatigue": 1.0,
     "seuil_rotation_fatigue": 0.65,
-    "ecart_niveau_acceptable_rotation": 6.0
+    "ecart_niveau_acceptable_rotation": 6.0,
+    "poids_ecart_reputation_bloc": 0.01,
+    "bonus_bloc_domicile": 0.10
   }
 }

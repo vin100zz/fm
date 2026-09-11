@@ -7,6 +7,52 @@
 En v1, **les 96 clubs sont pilotés par cette IA**. C'est elle qui produit
 l'essentiel de ce que l'utilisateur observe.
 
+## État de l'implémentation (2026-09-11)
+
+Implémenté dans `src/core/ai/` : `valorisation.py` (§1, `valeur`,
+`estimation_potentiel`), `utilite.py` (§2), `besoins.py` (§3, plus des
+fonctions de profondeur d'effectif partagées avec `mercato.py`/`contrats.py`),
+`budgets.py` (§4), `selection.py` (§8 et "Décision de remplacement" dans
+`docs/etats-joueur.md`), `mercato.py` (§5, réponse du vendeur et score d'une
+offre) et `contrats.py` (§6, satisfaction et renouvellement). `controller.py`
+définit `ClubController` (le Protocol de `CLAUDE.md`, adapté aux signatures
+réelles — voir sa docstring) et `AIController`, sa seule implémentation.
+`core/engine/match.py::MoteurPossession.simuler` consomme
+`selection.choisir_composition`/`decider_remplacement` via des paramètres
+optionnels — voir "Remplacements (étape 7)" dans `docs/moteur-match.md`.
+
+**Volontairement hors périmètre** : la boucle de mercato multi-clubs
+(`tour_mercato` en §5 — bilan, shortlist, offres, résolution simultanée pour
+tous les clubs) a besoin d'une orchestration saison/calendrier qui n'existe
+nulle part encore ; seules les primitives pures qu'une telle boucle
+appellerait sont construites ici, testées isolément. Idem pour
+l'orchestration hebdomadaire des renouvellements de contrat (§6) : la
+fonction `decision_renouvellement` existe et est testée, rien ne l'appelle
+encore selon un calendrier.
+
+**Formules non données par ce document, tranchées pendant l'implémentation**
+(chacune documentée dans le docstring de sa fonction) :
+
+- `surplus(club, joueur)` (§5) : rang du joueur dans la hiérarchie de son
+  poste, ramené à 0-1 par rapport à la profondeur utile du poste
+  (`besoins.py::rang_au_poste`/`profondeur_utile`, réutilisé de `projeter_temps_jeu`).
+- `temps_jeu_projete(joueur, club)` (§5) : même idée, en sens inverse — 1.0
+  pour un titulaire clair, dégressif jusqu'à 0 au-delà de la profondeur utile.
+- `ambition_sportive(club)` (§5) : réutilise
+  `club.personnalite.agressivite_salariale` plutôt que d'inventer un trait
+  séparé.
+- `reputation_attendue(joueur)` (§6) : réutilise `note_globale(joueur)`
+  directement — les deux sont sur la même échelle 1-100.
+- `ego` (§6) : aucun attribut de ce nom n'existe sur `Joueur` ; approximé par
+  l'écart du joueur à un niveau moyen de 50 (`contrats.py::_ego`), sur la même
+  idée que la convexité en talent de `valeur()`.
+- "le club renouvelle si `utilite(joueur, club)` justifie le coût sur la
+  durée" (§6) : aucune formule de coût/durée n'est donnée ; tranché comme
+  "utilité marginale strictement positive ET le salaire demandé ne fait pas
+  dépasser le plafond salarial" (garde-fou §7 déjà strict), en réutilisant la
+  masse salariale réelle de l'effectif plutôt qu'un modèle d'amortissement
+  séparé.
+
 Toute l'IA repose sur deux fonctions et une boucle de marché.
 
 ## 1. Valeur intrinsèque

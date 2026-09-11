@@ -21,12 +21,13 @@ décompte de suspension par match de la compétition, joué ou non
 (`suspensions.decrementer`) sont des fonctions pures, prêtes, mais rien ne
 les appelle encore — il n'existe pas de boucle de saison jour par jour.
 
-**Blessures en match : non implémentées, volontairement.** La formule est
-documentée par possession, mais sans mécanisme de remplacement
-(`AIController.decider_remplacement`, étape 7), une blessure en cours de
-match affaiblirait une équipe pour le reste du match exactement comme un
-carton rouge — ce qui ne représente pas ce qu'est une blessure. Seul le tirage
-quotidien hors match (indépendant de la fatigue) est implémenté.
+**Blessures en match : toujours non implémentées.** Le mécanisme de
+remplacement existe désormais (`core/ai/selection.py::decider_remplacement`,
+étape 7, branché dans `core/engine/match.py::MoteurPossession.simuler` via
+les paramètres optionnels `bancs`/`controleurs`), mais rien ne produit encore
+de blessure en cours de match — la branche "blessure" de
+`decider_remplacement` est donc du code mort tant que ça n'existe pas. Seul le
+tirage quotidien hors match (indépendant de la fatigue) est implémenté.
 
 **Moral : non implémenté.** Sa dynamique dépend des résultats du club et de
 la satisfaction contractuelle — des concepts qui n'existent pas encore
@@ -213,6 +214,20 @@ résultats du club, satisfaction contractuelle. Amplitude d'effet en match limit
 départ, pas dominer les résultats.
 
 ## Décision de remplacement (IA)
+
+**Implémenté** (`core/ai/selection.py::decider_remplacement`, appelé depuis
+`core/engine/match.py` à chaque possession mais consulté seulement aux
+minutes-clés, dédupliquées via `_EtatCote.derniere_minute_evaluee`).
+`decider_remplacement` est une fonction pure prenant un `EtatMatch` — c'est
+l'appelant qui décide quand l'invoquer. **Non implémenté** : les 3 fenêtres de
+remplacement du règlement réel (`config/monde.json ->
+regles_match.fenetres_remplacement`, non consommé) — seul le plafond de 5 est
+appliqué ; un remplacement peut donc survenir à n'importe quel point
+d'évaluation, pas uniquement à un arrêt de jeu groupé. L'ajustement tactique
+(déclencheur 4) ne modifie pas la hauteur de bloc à l'entrée du profil
+offensif — `hauteur_bloc` est fixée une fois en début de match
+(`core/ai/selection.py::choisir_composition`), voir la note correspondante
+dans `docs/moteur-match.md`.
 
 Évaluée toutes les 5 minutes à partir de la 55e.
 

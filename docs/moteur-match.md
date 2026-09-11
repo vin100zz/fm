@@ -29,12 +29,24 @@ commentaire dans `match.py::_possession_suivante`).
 **Volontairement hors périmètre pour cette passe**, pas oublié : forme/fatigue/
 moral sont lus une fois au coup d'envoi (pas de dynamique en cours de match,
 ni recalcul aux paliers de fatigue — la vraie dynamique de fatigue est
-l'étape 6) ; pas de remplacement en cours de match (besoin de
-`AIController.decider_remplacement`, étape 7) ; pas de blessure en match
-(étape 6) ; `hauteur_bloc` existe sur `Equipe` mais n'est pas encore consommé
-par le moteur (zone de récupération, vulnérabilité au contre — à ajouter
-quand ces effets seront calibrés) ; le gardien ne peut jamais être expulsé
-(pas de remplacement par un joueur de champ dans ce modèle).
+l'étape 6) ; pas de blessure en match (étape 6, voir `docs/etats-joueur.md`) ;
+`hauteur_bloc` existe sur `Equipe` mais n'est pas encore consommé par le
+moteur (zone de récupération, vulnérabilité au contre — à ajouter quand ces
+effets seront calibrés), y compris lors d'un remplacement tactique (la
+hauteur de bloc reste celle fixée au coup d'envoi, elle n'augmente pas quand
+un profil offensif entre) ; le gardien ne peut jamais être expulsé (pas de
+remplacement par un joueur de champ dans ce modèle).
+
+**Remplacements (étape 7)** : `MoteurPossession.simuler` accepte deux
+paramètres optionnels, `bancs: dict[bool, tuple[Joueur, ...]]` et
+`controleurs: dict[bool, ClubController]` — omis (comme dans tous les appels
+de calibrage et de benchmark ci-dessus), le match se comporte exactement comme
+avant. Fournis, chaque camp est évalué à chaque possession, mais
+`ClubController.decider_remplacement` n'est réellement consulté qu'aux
+minutes-clés (`config/etats.json -> remplacements`), dédupliquées via
+`_EtatCote.derniere_minute_evaluee`. Voir "Décision de remplacement (IA)"
+dans `docs/etats-joueur.md` pour ce qui manque encore (fenêtres de
+remplacement, blessure en match).
 
 **Calibrage (mis à jour le 2026-09-11)** : les suites `stats_match_possession`
 et `match_possession` (`src/benchmarks/suites/`) font tourner le vrai moteur

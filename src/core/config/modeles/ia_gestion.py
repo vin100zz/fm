@@ -104,6 +104,7 @@ class ContratsConfig:
     poids_temps_de_jeu: float
     poids_club: float
     facteur_ego: float
+    ratio_salaire_hebdo_sur_valeur: float
     duree_proposee_par_age: list[DureeContratParAge]
 
 
@@ -139,6 +140,8 @@ class SelectionConfig:
     poids_fatigue: float
     seuil_rotation_fatigue: float
     ecart_niveau_acceptable_rotation: float
+    poids_ecart_reputation_bloc: float
+    bonus_bloc_domicile: float
 
 
 @dataclass(frozen=True, slots=True, config=STRICT)
