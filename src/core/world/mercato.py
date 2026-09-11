@@ -57,6 +57,7 @@ from collections import defaultdict
 from random import Random
 
 from core.ai.besoins import evaluer_besoins, niveau_cible
+from core.ai.budgets import masse_salariale_actuelle
 from core.ai.contrats import duree_par_age, salaire_attendu
 from core.ai.mercato import repondre_offre, repondre_offre_dormant, score_offre
 from core.ai.utilite import note_meilleur_onze, utilite
@@ -268,8 +269,7 @@ def _peut_se_permettre(
         return False
     if not cfg.ia.garde_fous.plafond_salarial_strict:
         return True
-    masse_actuelle = sum(j.contrat.salaire_hebdo for j in effectif if j.contrat is not None)
-    return masse_actuelle + salaire + salaire_reserve <= club.masse_salariale_max
+    return masse_salariale_actuelle(effectif) + salaire + salaire_reserve <= club.masse_salariale_max
 
 
 def _executer_transfert(monde: Monde, joueur: Joueur, club_vendeur: Club, club_acheteur: Club, offre: Offre, cfg: Config) -> EvenementJour:

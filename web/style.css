@@ -68,6 +68,10 @@ body {
 
 #prochaines-echeances { font-size: 0.8rem; color: #cbd5e0; }
 
+#mercato-indicateur { font-size: 0.8rem; font-weight: 600; padding: 3px 8px; border-radius: 10px; }
+#mercato-indicateur.mercato-ouvert { background: rgba(47, 133, 90, 0.25); color: #68d391; }
+#mercato-indicateur.mercato-ferme { background: rgba(255, 255, 255, 0.08); color: #a0aec0; }
+
 #nav-principale {
   grid-area: nav;
   display: flex;

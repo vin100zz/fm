@@ -10,8 +10,10 @@ from core.config.modeles.racine import Config
 from core.domain.classement import LigneClassement
 from core.domain.club import Club, StatutClub
 from core.domain.date import Date
+from core.domain.historique import TransfertHistorique
 from core.domain.joueur import Joueur
 from core.domain.match import Match
+from core.domain.monde import Monde
 from core.world.note_globale import note_globale
 
 
@@ -22,11 +24,13 @@ class VueClubResume(BaseModel):
     statut: str
     competition_id: int | None
     reputation: int
+    nb_joueurs_sous_contrat: int
+    masse_salariale: int
+    budget_transfert: int
 
 
 class VueClubDetail(VueClubResume):
     note_centre_formation: int
-    budget_transfert: int
     masse_salariale_max: int
     solde: int
     formation_preferee: str
@@ -126,6 +130,18 @@ class VueMatchResume(BaseModel):
     buts_ext: int | None
 
 
+class VueTransfert(BaseModel):
+    date: str
+    joueur_id: int
+    joueur_nom: str
+    club_source_id: int | None
+    club_source_nom: str | None
+    club_cible_id: int | None
+    club_cible_nom: str | None
+    montant: int
+    saison: int
+
+
 FAMILLES_ATTRIBUTS: dict[str, list[str]] = {
     "techniques": ["passe", "technique", "finition", "tacle", "jeu_tete"],
     "mentaux": ["vision", "placement", "sang_froid"],
@@ -134,20 +150,28 @@ FAMILLES_ATTRIBUTS: dict[str, list[str]] = {
 }
 
 
-def vue_club_resume(club: Club) -> VueClubResume:
+def vue_club_resume(club: Club, nb_joueurs_sous_contrat: int, masse_salariale: int) -> VueClubResume:
     """`Club.competition_id` holds the source data's raw division id for
     every club, active or dormant (not a -1 sentinel) — only a club
     whose `statut` is ACTIF has one of the 5 simulated competitions
     behind it, so that's what gates whether to expose it.
+
+    `nb_joueurs_sous_contrat`/`masse_salariale` aren't on `Club` itself
+    (the squad lives in `Monde.joueurs`, keyed globally) — the caller
+    aggregates them, efficiently, from there (`core.ai.budgets`).
     """
     return VueClubResume(
         id=club.id, nom=club.nom, pays=club.pays, statut=club.statut.value,
         competition_id=club.competition_id if club.statut is StatutClub.ACTIF else None,
-        reputation=club.reputation,
+        reputation=club.reputation, nb_joueurs_sous_contrat=nb_joueurs_sous_contrat,
+        masse_salariale=masse_salariale, budget_transfert=club.budget_transfert,
     )
 
 
-def vue_club_detail(club: Club, classement: list[LigneClassement] | None, forme_recente: list[str]) -> VueClubDetail:
+def vue_club_detail(
+    club: Club, classement: list[LigneClassement] | None, forme_recente: list[str],
+    nb_joueurs_sous_contrat: int, masse_salariale: int,
+) -> VueClubDetail:
     rang = None
     if classement is not None:
         for position, ligne in enumerate(classement, start=1):
@@ -155,8 +179,8 @@ def vue_club_detail(club: Club, classement: list[LigneClassement] | None, forme_
                 rang = position
                 break
     return VueClubDetail(
-        **vue_club_resume(club).model_dump(),
-        note_centre_formation=club.note_centre_formation, budget_transfert=club.budget_transfert,
+        **vue_club_resume(club, nb_joueurs_sous_contrat, masse_salariale).model_dump(),
+        note_centre_formation=club.note_centre_formation,
         masse_salariale_max=club.masse_salariale_max, solde=club.solde, formation_preferee=club.formation_preferee,
         classement_actuel=rang, forme_recente=forme_recente,
     )
@@ -214,6 +238,19 @@ def vue_ligne_classement(ligne: LigneClassement, rang: int, club: Club) -> VueLi
         rang=rang, club_id=ligne.club_id, club_nom=club.nom, joues=ligne.joues, victoires=ligne.victoires,
         nuls=ligne.nuls, defaites=ligne.defaites, buts_pour=ligne.buts_pour, buts_contre=ligne.buts_contre,
         difference_buts=ligne.difference_buts, points=ligne.points,
+    )
+
+
+def vue_transfert(transfert: TransfertHistorique, monde: Monde) -> VueTransfert:
+    joueur = monde.joueurs.get(transfert.joueur_id)
+    club_source = monde.clubs.get(transfert.club_source_id) if transfert.club_source_id is not None else None
+    club_cible = monde.clubs.get(transfert.club_cible_id) if transfert.club_cible_id is not None else None
+    return VueTransfert(
+        date=str(transfert.date), joueur_id=transfert.joueur_id,
+        joueur_nom=f"{joueur.prenom} {joueur.nom}".strip() if joueur else "?",
+        club_source_id=transfert.club_source_id, club_source_nom=club_source.nom if club_source else None,
+        club_cible_id=transfert.club_cible_id, club_cible_nom=club_cible.nom if club_cible else None,
+        montant=transfert.montant, saison=transfert.saison,
     )
 
 

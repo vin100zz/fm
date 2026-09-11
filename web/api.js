@@ -28,6 +28,7 @@ export const api = {
     body: JSON.stringify({ jusqu_a }),
   }),
   journal: () => requete("/api/monde/journal"),
+  transferts: (params) => requete(avecParametres("/api/monde/transferts", params)),
 
   clubs: (params) => requete(avecParametres("/api/clubs", params)),
   club: (id) => requete(`/api/clubs/${id}`),

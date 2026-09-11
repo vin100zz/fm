@@ -213,6 +213,15 @@ boutons d'avance manuelle sont désactivés pendant que l'auto tourne pour
 cliquable pour permettre l'arrêt. S'arrête aussi tout seul si un appel
 échoue (erreur affichée comme pour un clic manuel).
 
+**Indicateur de fenêtre de mercato (2026-09-11, ajouté)** : pastille
+"● Mercato ouvert" / "○ Mercato fermé" à côté de la date, dérivée de
+`core.world.mercato.fenetre_mercato_ouverte(monde.date, cfg)` — même
+fonction pure que celle qui décide si `avancer_un_jour` doit jouer un
+tour de mercato, exposée en plus dans `GET /api/monde/etat` (nouveau
+champ `mercato_ouvert`) pour ne pas dupliquer la logique été/hiver côté
+front. Se met à jour à chaque avancée du temps, y compris pendant
+l'avance automatique.
+
 ## Écrans
 
 ### Club
@@ -226,7 +235,17 @@ cliquable pour permettre l'arrêt. S'arrête aussi tout seul si un appel
 | Historique | classements passés, palmarès, transferts marquants |
 
 En-tête : nom, pays, compétition, réputation, classement actuel, forme sur les
-5 derniers matches.
+5 derniers matches, nombre de joueurs sous contrat, masse salariale actuelle
+(€/semaine) et budget transferts (2026-09-11, ajouté — pas le plafond
+salarial ni le solde, qui restent réservés à l'onglet Budget, non
+implémenté). Les trois mêmes chiffres apparaissent aussi comme colonnes
+de la liste des clubs, pour comparer d'un coup d'œil sans ouvrir chaque
+fiche. `GET /api/clubs` agrège `nb_joueurs_sous_contrat`/`masse_salariale`
+par club en un seul passage sur les ~32 000 joueurs
+(`core.ai.budgets.effectifs_par_club`) avant pagination, plutôt que de
+refiltrer l'effectif de chaque club un par un (`O(clubs)` au lieu de
+`O(clubs × joueurs)`) — `budget_transfert` est en revanche un attribut
+direct de `Club`, pas d'agrégation nécessaire.
 
 ### Compétition
 
@@ -268,6 +287,17 @@ Vue transversale sur les 32 000 joueurs. Filtres serveur : poste, âge, niveau,
 nationalité, club, statut du club (actif ou dormant), fourchette de salaire,
 statut contractuel. Tri sur toute colonne, pagination obligatoire.
 
+### Transferts (2026-09-11, ajouté)
+
+Vue transversale sur `Monde.historique.transferts`, tous clubs et toutes
+saisons confondus — pendant du sous-onglet "Transferts" de la fiche club
+(qui reste filtré sur un seul club), accessible directement depuis le
+menu principal. Colonnes : date, joueur, club d'origine, club de
+destination, montant, saison. Triable sur toute colonne (date décroissante
+par défaut), pagination serveur, filtre par saison. `GET
+/api/monde/transferts` accepte aussi `club=` (non exposé dans ce filtre
+de menu — déjà couvert par `GET /api/clubs/{id}/transferts`).
+
 Un club dormant est consultable — nom, effectif, fiches joueurs — mais n'a ni
 classement, ni calendrier, ni statistiques de saison. L'interface doit le
 signaler explicitement plutôt que d'afficher des sections vides.
@@ -277,9 +307,10 @@ signaler explicitement plutôt que d'afficher des sections vides.
 Implémentés sauf mention contraire (voir "État de l'implémentation" plus haut) :
 
 ```
-GET  /api/monde/etat                     date, saison, prochaines échéances
+GET  /api/monde/etat                     date, saison, prochaines échéances, mercato_ouvert
 POST /api/monde/avancer                  {jusqu_a: "jour" | "journee"}          — pas de "fin_mercato"
 GET  /api/monde/journal?date=             dernier journal produit             — pas de filtre par date
+GET  /api/monde/transferts?saison=&club=&page=   tous les transferts, paginé
 
 GET  /api/clubs?competition=&statut=actif|dormant&recherche=&page=&tri=
 GET  /api/clubs/{id}                      en-tête + résumé

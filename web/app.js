@@ -3,6 +3,7 @@ import * as vueClubs from "./vues/clubs.js";
 import * as vueCompetitions from "./vues/competitions.js";
 import * as vueJoueurs from "./vues/joueurs.js";
 import * as vueMatch from "./vues/match.js";
+import * as vueTransferts from "./vues/transferts.js";
 
 const conteneur = document.getElementById("contenu");
 
@@ -14,6 +15,11 @@ async function majBarreTemps() {
     .map(([nom, date]) => `${nom} : ${date}`)
     .join(" · ");
   document.getElementById("prochaines-echeances").textContent = echeances;
+
+  const indicateurMercato = document.getElementById("mercato-indicateur");
+  indicateurMercato.textContent = etat.mercato_ouvert ? "● Mercato ouvert" : "○ Mercato fermé";
+  indicateurMercato.classList.toggle("mercato-ouvert", etat.mercato_ouvert);
+  indicateurMercato.classList.toggle("mercato-ferme", !etat.mercato_ouvert);
 }
 
 function afficherJournal(journal) {
@@ -130,6 +136,7 @@ const routes = [
   { motif: /^#\/joueurs\/(\d+)$/, gestionnaire: (m) => vueJoueurs.renderDetail(conteneur, m[1]) },
   { motif: /^#\/joueurs$/, gestionnaire: () => vueJoueurs.renderListe(conteneur) },
   { motif: /^#\/matches\/(\d+)$/, gestionnaire: (m) => vueMatch.renderDetail(conteneur, m[1]) },
+  { motif: /^#\/transferts$/, gestionnaire: () => vueTransferts.renderListe(conteneur) },
 ];
 
 async function routerActuel() {

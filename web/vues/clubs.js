@@ -43,6 +43,9 @@ export async function renderListe(conteneur) {
       { cle: "pays", libelle: "Pays" },
       { cle: "statut", libelle: "Statut" },
       { cle: "reputation", libelle: "Réputation" },
+      { cle: "nb_joueurs_sous_contrat", libelle: "Sous contrat" },
+      { cle: "masse_salariale", libelle: "Masse salariale/sem.", format: (v) => `${v.toLocaleString("fr-FR")} €` },
+      { cle: "budget_transfert", libelle: "Budget transferts", format: (v) => `${v.toLocaleString("fr-FR")} €` },
     ];
     tableauTriable(resultats, colonnes, page.items, {
       onClicLigne: (id) => (window.location.hash = `#/clubs/${id}`),
@@ -69,6 +72,11 @@ export async function renderDetail(conteneur, id) {
     <p>${echappe(club.pays)} · Réputation ${club.reputation}
       ${club.classement_actuel ? ` · ${club.classement_actuel}e au classement` : ""}
       ${club.forme_recente.length ? ` · Forme : ${formeBadges(club.forme_recente)}` : ""}
+    </p>
+    <p>
+      ${club.nb_joueurs_sous_contrat} joueur${club.nb_joueurs_sous_contrat > 1 ? "s" : ""} sous contrat ·
+      Masse salariale : ${club.masse_salariale.toLocaleString("fr-FR")} €/sem. ·
+      Budget transferts : ${club.budget_transfert.toLocaleString("fr-FR")} €
     </p>
     ${club.statut === "dormant" ? '<p class="statut-dormant">Club dormant : pas de classement, de calendrier ni de statistiques de saison.</p>' : ""}
     <div class="onglets">
