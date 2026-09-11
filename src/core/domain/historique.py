@@ -1,15 +1,18 @@
 """Long-lived records that outlive a season. See "Historique et
 volumétrie" in docs/modele-donnees.md.
 
-Only `transferts` is populated from step 2 onward (import can seed it
-with nothing, but its shape is fully specified). `palmares` and
-`trajectoires_attributs` are added once the features that produce them
-(end of season, attribute sampling) exist — adding fields later is a
-local, additive change, not a redesign.
+`transferts` from step 2 onward, `palmares` from the end-of-season
+rollover (`core/world/saison.py`) — added exactly as the module
+docstring anticipated: a local, additive change, not a redesign.
+`trajectoires_attributs` still isn't produced by anything.
+`SaisonTerminee` only records the champion and final table, not a
+season's top scorer/passer — nothing aggregates per-player match
+events across a season yet (see docs/ui.md).
 """
 
 from dataclasses import dataclass, field
 
+from core.domain.classement import LigneClassement
 from core.domain.date import Date
 
 
@@ -22,6 +25,18 @@ class TransfertHistorique:
     montant: int
 
 
+@dataclass(frozen=True, slots=True)
+class SaisonTerminee:
+    competition_id: int
+    saison: int
+    classement_final: list[LigneClassement]
+
+    @property
+    def champion_id(self) -> int:
+        return self.classement_final[0].club_id
+
+
 @dataclass(slots=True)
 class Historique:
     transferts: list[TransfertHistorique] = field(default_factory=list)
+    palmares: list[SaisonTerminee] = field(default_factory=list)

@@ -1,5 +1,131 @@
 # Interface
 
+## Sauvegarde/chargement (2026-09-11, ajouté après l'étape 9)
+
+Implémenté : `core/world/persistance.py` (`sauvegarder`, `charger`,
+`lister_sauvegardes`) et `api/routes_partie.py`. Sérialisation générique
+pilotée par les type hints plutôt qu'une fonction par type de domaine :
+`dataclasses.fields` pour parcourir un objet, `typing.get_type_hints`
+(mis en cache par classe — sinon 32 000 `Joueur` refont la même
+résolution 32 000 fois) pour reconstruire, avec un cas particulier pour
+les `Enum` (valeur) et `X | None`. Un nouveau champ de domaine n'a donc
+rien à faire ici — même esprit que le reste du projet.
+
+**Le flux aléatoire est sauvegardé, pas seulement la graine.**
+`Random.getstate()` est lui-même sérialisable (son tuple interne
+converti en liste) ; le restaurer via `setstate()` reprend exactement la
+même séquence là où la sauvegarde l'a coupée, plutôt que rejouer depuis
+le début de la graine (`Monde.graine` reste stocké séparément — c'est ce
+que CLAUDE.md documente pour une partie rejouée *depuis le début*, pas
+pour une reprise). Vérifié par round-trip exact sur le monde réel à 32
+000 joueurs (`monde_charge == monde_original`, `tests/unit/world/
+test_persistance.py` + `tests/integration/api/`) et par continuité du
+flux aléatoire après reprise.
+
+**Format** : JSON gzippé (CLAUDE.md), `compresslevel=1` — la compression
+maximale (défaut de `gzip.compress`) prenait ~3.3 s à elle seule sur le
+monde complet pour ~10 % de taille en moins ; au niveau 1 la sauvegarde
+prend ~1.5 s (le chargement, dominé par la reconstruction récursive,
+~2.5 s). Les fichiers vivent dans `saves/` à la racine (gitignored,
+comme `data/` n'est pas versionné) ; le nom de slot est assaini
+(alphanumérique/`-`/`_`) côté serveur avant de construire le chemin.
+
+**Front** : barre sous la navigation (`#barre-partie`) — champ de nom,
+liste déroulante des sauvegardes existantes, boutons Sauvegarder/Charger.
+Charger redemande confirmation (`confirm()` natif) avant d'écraser l'état
+courant.
+
+## Fin de saison (2026-09-11, ajouté après l'étape 9)
+
+Implémenté : `core/world/saison.py::_relancer_saisons_terminees`, appelé
+à la fin de chaque `avancer_un_jour`. Une compétition "termine" sa saison
+dès que tous ses matchs de la `saison` en cours ont un `resultat` —
+détecté indépendamment par compétition, pas globalement : Ligue 1 (18
+clubs, 34 journées) et La Liga (20 clubs, 38 journées) ne finissent pas
+le même jour même en partant de la même date. À ce moment-là :
+
+1. le classement final est calculé et archivé dans
+   `Monde.historique.palmares` (`SaisonTerminee`, nouveau type) ;
+2. le cumul de cartons jaunes de la saison est remis à zéro pour les
+   joueurs des clubs de cette compétition
+   (`core.world.etats.suspensions.reinitialiser_saison`, une fonction
+   prête depuis l'étape 6 que rien n'appelait encore) ;
+3. un nouveau calendrier est généré immédiatement pour les **mêmes**
+   `club_ids`.
+
+**Pas de promotion/relégation** : c'était le périmètre convenu.
+`Competition.appliquer_fin_saison` (docs/architecture.md) n'est donc
+toujours pas implémenté — seule la partie "reconduire la même
+compétition" l'est. `Match` porte maintenant un champ `saison` (sans
+ça, le classement d'une saison 2 se serait mélangé avec celui de la
+saison 1) ; `Competition.saison_actuelle` suit l'édition en cours,
+indépendamment de `Monde.saison` qui n'est qu'un affichage global (le
+maximum des `saison_actuelle` de toutes les compétitions).
+
+`GET /api/competitions/{id}/classement` et `.../calendrier` (et
+`GET /api/clubs/{id}/calendrier`) ne montrent que la saison en cours —
+`GET /api/competitions/{id}/historique` (nouveau) expose le palmarès :
+champion et classement final par saison passée, mais **pas** le
+meilleur buteur/passeur (toujours aucune agrégation de stats de match
+par joueur, voir plus bas).
+
+Vérifié par `tests/unit/world/test_saison.py::TestFinDeSaison` sur un
+monde synthétique à 4 clubs (une vraie saison des 5 championnats est
+bien trop longue — 34 à 38 journées — pour être jouée dans un test).
+
+## État de l'implémentation (2026-09-11)
+
+Étape 9, la dernière de l'ordre de construction. Contrairement aux étapes
+précédentes, celle-ci a dû construire au passage la pièce que chaque étape
+depuis la 6 avait explicitement différée : **une boucle de saison**. Sans
+elle, aucune route "avancer le temps" n'avait quoi que ce soit à appeler.
+
+**`src/core/world/` (nouveau)** : `calendrier.py` (`generer_calendrier`,
+méthode du cercle, aller-retour), `classement.py` (`calculer_classement`,
+départage points/différence de buts/buts pour/confrontation directe —
+cette dernière seulement par paire stricte, pas en sous-groupe complet,
+voir le docstring du module) et `saison.py` (`initialiser_saison`,
+`avancer_un_jour`, `avancer_jusqua_journee` — simule les matches du jour
+via `AIController` + `MoteurPossession`, applique fatigue/forme/blessures/
+suspensions, journalise).
+
+**`src/api/`** (nouveau, FastAPI + `uvicorn`, ajoutés aux dépendances) :
+un état de partie unique en mémoire (`etat_serveur.py`, un `Monde` importé
+au démarrage puis muté par la boucle de saison), des vues pydantic
+dédiées par écran (`vues.py` — "penser en vues, pas en entités") et cinq
+routeurs (`routes_monde.py`, `routes_clubs.py`, `routes_competitions.py`,
+`routes_joueurs.py`, `routes_matches.py`). Tous les endpoints listés en
+"Endpoints" plus bas sans mention "non implémenté" fonctionnent contre le vrai jeu de données
+(32 000 joueurs, 96 clubs actifs) — vérifié à la fois par
+`tests/integration/api/` (21 tests, TestClient) et manuellement au
+navigateur (clubs, effectif, calendrier, classement, recherche de
+joueurs, fiche joueur, compte rendu de match, avancée du temps).
+
+**`web/`** (nouveau) : HTML/CSS/JS vanilla comme spécifié, un routeur par
+ancre fait maison (`app.js`), un tableau triable réutilisé partout
+(`composants.js`). Couvre Clubs (liste + effectif + calendrier),
+Compétitions (liste + classement + calendrier), Recherche de joueurs +
+fiche joueur, et le compte rendu de match — pas les cinq écrans en
+entier (voir "Non implémenté" plus bas).
+
+**Non implémenté, documenté plutôt que masqué** :
+
+- **Onglets Budget/Transferts/Historique du club, Statistiques
+  (buteurs/passeurs/notes) et le volet "meilleur buteur par saison" de
+  l'Historique de compétition** : rien n'agrège de séries temporelles
+  (finances, transferts, stats de match par joueur) — seule la
+  démographie, l'état courant et (depuis peu) le palmarès par saison
+  sont suivis. Ajouter ces endpoints suppose d'abord l'agrégation
+  correspondante dans `core/world`, pas seulement une nouvelle vue.
+- **`fin_mercato` sur `POST /api/monde/avancer`** : pas de boucle de
+  mercato à qui faire avancer le temps jusqu'à la fin
+  (`docs/ia-gestion.md`).
+- **Promotion/relégation** : voir "Fin de saison" plus haut — la
+  saison se relance bien, mais toujours pour les mêmes clubs.
+- **Mode "match en direct"** : `ResultatMatch.evenements` est déjà
+  horodaté comme prévu (`docs/architecture.md`), rien ne le rejoue
+  progressivement — le front affiche le compte rendu complet d'un coup.
+
 ## Contrainte v1
 
 L'utilisateur est **observateur**. Aucun écran n'a de bouton d'action sur un
@@ -98,28 +224,30 @@ signaler explicitement plutôt que d'afficher des sections vides.
 
 ## Endpoints
 
+Implémentés sauf mention contraire (voir "État de l'implémentation" plus haut) :
+
 ```
 GET  /api/monde/etat                     date, saison, prochaines échéances
-POST /api/monde/avancer                  {jusqu_a: "jour" | "journee" | "fin_mercato"}
-GET  /api/monde/journal?date=             événements du jour
+POST /api/monde/avancer                  {jusqu_a: "jour" | "journee"}          — pas de "fin_mercato"
+GET  /api/monde/journal?date=             dernier journal produit             — pas de filtre par date
 
 GET  /api/clubs?competition=&statut=actif|dormant&recherche=&page=&tri=
 GET  /api/clubs/{id}                      en-tête + résumé
 GET  /api/clubs/{id}/effectif
 GET  /api/clubs/{id}/calendrier
-GET  /api/clubs/{id}/finances
-GET  /api/clubs/{id}/transferts?saison=
-GET  /api/clubs/{id}/historique
+GET  /api/clubs/{id}/finances             — non implémenté
+GET  /api/clubs/{id}/transferts?saison=   — non implémenté
+GET  /api/clubs/{id}/historique           — non implémenté
 
 GET  /api/competitions
 GET  /api/competitions/{id}/classement
 GET  /api/competitions/{id}/calendrier?journee=
-GET  /api/competitions/{id}/statistiques?type=buteurs|passeurs|notes
-GET  /api/competitions/{id}/historique
+GET  /api/competitions/{id}/statistiques?type=buteurs|passeurs|notes   — non implémenté
+GET  /api/competitions/{id}/historique    champion + classement final par saison — pas de buteur/passeur
 
 GET  /api/joueurs?poste=&age_min=&age_max=&niveau_min=&nation=&club=&statut_club=&page=&tri=
 GET  /api/joueurs/{id}
-GET  /api/joueurs/{id}/historique
+GET  /api/joueurs/{id}/historique         — non implémenté
 
 GET  /api/matches/{id}                    compte rendu complet
 

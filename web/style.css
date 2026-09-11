@@ -1,0 +1,199 @@
+:root {
+  --couleur-gardien: #b8860b;
+  --couleur-defense: #2b6cb0;
+  --couleur-milieu: #2f855a;
+  --couleur-attaque: #c53030;
+  --fond: #f7f7f5;
+  --fond-carte: #ffffff;
+  --bordure: #ddd;
+  --texte: #222;
+  --texte-attenue: #666;
+  --alerte: #c53030;
+  --victoire: #2f855a;
+  --nul: #a0a0a0;
+  --defaite: #c53030;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--texte);
+  background: var(--fond);
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  grid-template-rows: auto auto auto 1fr;
+  grid-template-areas:
+    "barre barre"
+    "nav journal"
+    "partie journal"
+    "contenu journal";
+  min-height: 100vh;
+}
+
+#barre-temps {
+  grid-area: barre;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: #1a202c;
+  color: white;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.barre-temps-gauche, .barre-temps-droite {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+#barre-temps button {
+  background: #2d3748;
+  color: white;
+  border: 1px solid #4a5568;
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+#barre-temps button:hover { background: #4a5568; }
+#barre-temps button:disabled { opacity: 0.5; cursor: wait; }
+
+#prochaines-echeances { font-size: 0.8rem; color: #cbd5e0; }
+
+#nav-principale {
+  grid-area: nav;
+  display: flex;
+  gap: 16px;
+  padding: 10px 16px;
+  background: var(--fond-carte);
+  border-bottom: 1px solid var(--bordure);
+}
+
+#nav-principale a {
+  color: var(--texte);
+  text-decoration: none;
+  font-weight: 600;
+  padding: 4px 0;
+}
+
+#nav-principale a:hover { color: var(--couleur-defense); }
+
+#barre-partie {
+  grid-area: partie;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: var(--fond-carte);
+  border-bottom: 1px solid var(--bordure);
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+
+#barre-partie select, #barre-partie input {
+  padding: 4px 6px;
+  border: 1px solid var(--bordure);
+  border-radius: 4px;
+}
+
+#barre-partie button {
+  padding: 4px 10px;
+  border: 1px solid var(--bordure);
+  border-radius: 4px;
+  background: var(--fond);
+  cursor: pointer;
+}
+
+#barre-partie button:hover { background: #eee; }
+#statut-partie { color: var(--texte-attenue); }
+
+#contenu {
+  grid-area: contenu;
+  padding: 16px;
+  overflow-x: auto;
+}
+
+#journal {
+  grid-area: journal;
+  padding: 16px;
+  background: var(--fond-carte);
+  border-left: 1px solid var(--bordure);
+  overflow-y: auto;
+  max-height: 100vh;
+}
+
+#journal h2 { font-size: 1rem; margin-top: 0; }
+#journal-liste { list-style: none; padding: 0; margin: 0; font-size: 0.85rem; }
+#journal-liste li { padding: 6px 0; border-bottom: 1px solid #eee; }
+#journal-liste li.blessure { color: var(--alerte); }
+
+h1 { font-size: 1.4rem; margin-top: 0; }
+h2 { font-size: 1.1rem; }
+
+table { border-collapse: collapse; width: 100%; background: var(--fond-carte); }
+th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #eee; font-size: 0.9rem; }
+th { cursor: pointer; user-select: none; background: #fafafa; position: sticky; top: 0; }
+th:hover { background: #f0f0f0; }
+tr:hover td { background: #f5f9ff; }
+
+.poste-badge {
+  display: inline-block;
+  min-width: 34px;
+  text-align: center;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.poste-GB { background: var(--couleur-gardien); }
+.poste-DC, .poste-DL, .poste-DR { background: var(--couleur-defense); }
+.poste-MDC, .poste-MC, .poste-MOC { background: var(--couleur-milieu); }
+.poste-AILG, .poste-AILD, .poste-BU { background: var(--couleur-attaque); }
+
+.echeance-proche { color: var(--alerte); font-weight: 600; }
+
+.forme-lettre {
+  display: inline-block;
+  width: 18px; height: 18px;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 50%;
+  color: white;
+  font-size: 0.7rem;
+  margin-right: 2px;
+}
+.forme-V { background: var(--victoire); }
+.forme-N { background: var(--nul); }
+.forme-D { background: var(--defaite); }
+
+.filtres { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.filtres input, .filtres select { padding: 4px 6px; border: 1px solid var(--bordure); border-radius: 4px; }
+
+.pagination { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.pagination button { padding: 4px 10px; }
+
+.carte { background: var(--fond-carte); border: 1px solid var(--bordure); border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+
+.ligne-attribut { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.85rem; }
+.nom-attribut { width: 90px; flex-shrink: 0; text-transform: capitalize; }
+.attribut-barre-fond { background: #eee; border-radius: 3px; overflow: hidden; height: 10px; width: 110px; flex-shrink: 0; }
+.attribut-barre { background: var(--couleur-defense); height: 100%; }
+
+.onglets { display: flex; gap: 6px; margin-bottom: 12px; }
+.onglets button { padding: 6px 12px; border: 1px solid var(--bordure); background: var(--fond-carte); cursor: pointer; border-radius: 4px; }
+.onglets button.actif { background: var(--couleur-defense); color: white; border-color: var(--couleur-defense); }
+
+.statut-dormant { color: var(--texte-attenue); font-style: italic; }
+
+.evenement-ligne { padding: 4px 0; border-bottom: 1px solid #eee; font-size: 0.9rem; }
+
+@media (max-width: 900px) {
+  body { grid-template-columns: 1fr; grid-template-areas: "barre" "nav" "partie" "contenu" "journal"; }
+}

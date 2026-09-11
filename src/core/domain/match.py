@@ -76,3 +76,8 @@ class Match:
     domicile_id: int
     exterieur_id: int
     resultat: ResultatMatch | None = None
+    # Quelle édition de la compétition ce fixture appartient — voir
+    # Competition.saison_actuelle et "Fin de saison" dans docs/ui.md.
+    # Sans ça, le classement d'une saison 2 se mélangerait avec celui
+    # de la saison 1 dans core/world/classement.py.
+    saison: int = 1

@@ -4,9 +4,12 @@
 
 from core.domain.attributs import Attributs
 from core.domain.club import Club, PersonnaliteClub, StatutClub
+from core.domain.competition import Competition
 from core.domain.contrat import Contrat
 from core.domain.date import Date
+from core.domain.historique import Historique
 from core.domain.joueur import Joueur
+from core.domain.monde import Monde
 from core.domain.poste import Poste
 
 DATE = Date(2026, 8, 10)
@@ -49,3 +52,18 @@ def un_effectif_complet(club_id: int) -> list[Joueur]:
     joueurs = [un_joueur(id=200 + i, poste=Poste.MC, club_id=club_id) for i in range(15)]
     joueurs.append(un_joueur(id=999, poste=Poste.GB, club_id=club_id))
     return joueurs
+
+
+def une_competition(**overrides) -> Competition:
+    valeurs = dict(id=1, nom="Ligue Test", pays="ENG", niveau=1, club_ids=[])
+    valeurs.update(overrides)
+    return Competition(**valeurs)
+
+
+def un_monde(**overrides) -> Monde:
+    valeurs = dict(
+        date=DATE, saison=1, graine=1, joueurs={}, clubs={}, competitions={},
+        historique=Historique(), prochain_id=100_000, matches={},
+    )
+    valeurs.update(overrides)
+    return Monde(**valeurs)

@@ -81,6 +81,27 @@ class Competition(Protocol):
 au reste. La promotion/relégation est un `EvenementSaison` produit par
 `appliquer_fin_saison`, donc localisée.
 
+**Implémenté (étape 9) comme des fonctions pures, pas une classe
+`Championnat`** : `core/world/calendrier.py::generer_calendrier` et
+`core/world/classement.py::calculer_classement` couvrent les deux premières
+méthodes (signatures adaptées — `club_ids`/`cfg` plutôt que `clubs`/pas de
+config, `list[LigneClassement]` plutôt qu'un type `Classement` qui n'a
+jamais été défini). Une seule implémentation existe, donc l'écart au
+Protocol ne coûte rien aujourd'hui ; le jour d'une deuxième compétition
+(coupe), formaliser un vrai Protocol redeviendra utile.
+
+`appliquer_fin_saison` est **partiellement** implémenté (ajouté après
+l'étape 9, voir "Fin de saison" dans `docs/ui.md`) :
+`core/world/saison.py::_relancer_saisons_terminees` détecte la fin de
+saison d'une compétition (tous ses matchs de la `saison` en cours ont un
+résultat — indépendamment par compétition, elles ne finissent pas toutes
+le même jour), archive le classement final dans
+`Monde.historique.palmares` et relance un calendrier pour les mêmes
+`club_ids`. Ça ne produit pas de vrai `EvenementSaison` typé (le journal
+du jour, `EvenementJour`, gagne juste un type `FIN_DE_SAISON` de plus) et
+**aucune promotion/relégation** — le périmètre convenu excluait
+explicitement ce second morceau, qui reste à faire.
+
 ### RegleTransfert
 
 ```python
@@ -136,6 +157,21 @@ def appliquer(monde: Monde, evenements: list[Evenement]) -> None: ...
 
 Bénéfices : les fonctions de simulation restent pures et testables, le journal
 d'événements de l'interface est gratuit, et l'annulation devient possible.
+
+**`core/world/saison.py::avancer_un_jour` (étape 9) ne suit pas exactement
+cette forme.** La règle reste respectée là où elle compte : `core/engine`
+(le moteur de match) ne mute jamais rien, il ne fait que produire un
+`ResultatMatch`, et `core/world/appliquer_match.py::appliquer_resultat_match`
+reste l'unique point qui traduit un `ResultatMatch` en mutations de
+`Joueur`. Mais au niveau du jour entier, `avancer_un_jour` appelle cet
+applicateur (et `core/world/etats/*`) directement plutôt que de renvoyer
+une grosse liste de `Evenement` qu'un `appliquer()` séparé consommerait
+ensuite — il retourne un journal (`list[EvenementJour]`, en français,
+pour l'interface) en même temps qu'il mute `monde`. Annuler une journée
+n'est donc pas possible tel quel ; le refactorer vers la forme
+`jouer_journee`/`appliquer` documentée ici resterait local si le besoin
+se présente, puisque chaque mutation individuelle passe déjà par un
+point unique.
 
 ## Testabilité
 

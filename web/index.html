@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Football Manager Light</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header id="barre-temps">
+    <div class="barre-temps-gauche">
+      <strong>Football Manager Light</strong>
+      <span id="date-courante">—</span>
+      <span id="saison-courante"></span>
+    </div>
+    <div class="barre-temps-droite">
+      <span id="prochaines-echeances"></span>
+      <button id="btn-avancer-jour">Avancer d'un jour</button>
+      <button id="btn-avancer-journee">Avancer à la prochaine journée</button>
+    </div>
+  </header>
+
+  <nav id="nav-principale">
+    <a href="#/clubs">Clubs</a>
+    <a href="#/competitions">Compétitions</a>
+    <a href="#/joueurs">Recherche de joueurs</a>
+  </nav>
+
+  <div id="barre-partie">
+    <select id="slots-existants"><option value="">— sauvegardes —</option></select>
+    <input type="text" id="slot-partie" value="partie1" placeholder="nom de la sauvegarde" />
+    <button id="btn-sauvegarder">💾 Sauvegarder</button>
+    <button id="btn-charger">📂 Charger</button>
+    <span id="statut-partie"></span>
+  </div>
+
+  <main id="contenu"></main>
+
+  <aside id="journal">
+    <h2>Journal</h2>
+    <ul id="journal-liste"></ul>
+  </aside>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
