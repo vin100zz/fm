@@ -60,7 +60,7 @@ def _resoudre_corner(
     but = rng.random() < p_but
     evenements = (
         Evenement(minute, TypeEvenement.TIR, receptionneur.joueur.id, None, Zone.VERITE, couloir, detail="corner"),
-        evenement_issue(minute, but, receptionneur, gardien_adverse, Zone.VERITE, couloir),
+        evenement_issue(minute, but, receptionneur, gardien_adverse, Zone.VERITE, couloir, detail="corner"),
     )
     return ResultatTir(but=but, evenements=evenements, xg=xg)
 
@@ -88,6 +88,6 @@ def _resoudre_coup_franc(
     but = rng.random() < p_but
     evenements = (
         Evenement(minute, TypeEvenement.TIR, tireur.joueur.id, None, Zone.VERITE, couloir, detail="coup_franc"),
-        evenement_issue(minute, but, tireur, gardien_adverse, Zone.VERITE, couloir),
+        evenement_issue(minute, but, tireur, gardien_adverse, Zone.VERITE, couloir, detail="coup_franc"),
     )
     return ResultatTir(but=but, evenements=evenements, xg=xg)

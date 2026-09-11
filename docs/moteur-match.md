@@ -36,12 +36,48 @@ par le moteur (zone de récupération, vulnérabilité au contre — à ajouter
 quand ces effets seront calibrés) ; le gardien ne peut jamais être expulsé
 (pas de remplacement par un joueur de champ dans ce modèle).
 
-**Calibrage** : `k_prog=0.13`, `k_occ=0.11` donnent des totaux de tirs et de
-buts dans le bon ordre de grandeur sur PSG-Toulouse, Man City-Burnley et le
-Clasico (balayage manuel, pas encore via le harnais). La différenciation
-victoire/nul/défaite reste trop faible (les favoris ne gagnent pas assez
-souvent) — calibrage complet à faire via `benchmarks` (suites `stats_match`
-et `formations` étendues à ce moteur, puis `match`), pas encore fait.
+**Calibrage (mis à jour le 2026-09-11)** : les suites `stats_match_possession`
+et `match_possession` (`src/benchmarks/suites/`) font tourner le vrai moteur
+par possessions — réimport frais de `data/` à chaque exécution plutôt qu'un
+instantané figé, puisque rien ne peut encore faire dériver un effectif d'une
+exécution à l'autre (pas de mercato). `stats_match_possession` est au vert
+sur 6 cibles sur 7 :
+
+| Cible | Résultat | Statut |
+|---|---|---|
+| Tirs par équipe | 12.9 | OK |
+| xG par équipe | 1.41 | OK |
+| Possession | 50 % | OK |
+| Jaunes par équipe | 1.99 | OK |
+| Rouges par équipe | 0.059 | OK |
+| Part de buts sur CPA | 0.277 | OK |
+| Répartition par couloir | 25/49/25 (G/A/D) | ECHEC |
+
+Coefficients retenus : `transitions.k_prog=0.116`,
+`occasion.xg_base_frappe=0.092`, `occasion.xg_base_centre=0.076`,
+`coups_arretes.xg_base_corner=0.21`,
+`cartons.probabilite_jaune_par_turnover_defensif=0.0075`,
+`cartons.probabilite_rouge_direct_par_turnover_defensif=0.00025`.
+
+**Répartition par couloir : limite structurelle, pas un coefficient à
+régler.** Ni `beta_softmax` (0.01 à 0.05 testés, aucun effet) ni
+`probabilite_changement_aile` (testé jusqu'à 0.02) ne rapprochent l'axe de
+33 % — le faire baisser suffisamment romprait la cible de changement d'aile
+(15-20 % des progressions). La cause réelle : la plupart des postes d'un
+onze pèsent majoritairement sur l'axe dans `implications.json → lateral`
+(GB, DC, MDC, MC, MOC à 60 %), donc l'axe domine mécaniquement le choix de
+couloir quel que soit l'écart de force. Non résolu — nécessiterait de revoir
+les poids latéraux eux-mêmes, une décision de contenu, pas un balayage.
+
+**`match_possession` : les favoris ne gagnent pas assez souvent**, même
+après calibrage de `stats_match_possession` (ex. PSG bat Toulouse 57 % du
+temps contre 75 % visé). Balayé `k_occ` de 0.11 à 0.19 sans tendance claire.
+Cause probable : même limite que documentée dans `docs/benchmarks.md` pour
+le moteur analytique — la synthèse d'attributs v0 (`docs/modele-donnees.md`)
+sature en haut d'échelle et comprime l'écart de force réel entre équipes
+« très fortes » et « fortes » (Man City/Burnley n'a jamais convergé non plus,
+pour la même raison). Pas un problème de coefficient de moteur : à revisiter
+quand de vraies données d'attributs remplaceront la synthèse.
 
 ## Deux moteurs
 

@@ -122,8 +122,16 @@ def _resoudre_centre(
 
 
 def evenement_issue(
-    minute: int, but: bool, tireur: PositionOnze, gardien_adverse: PositionOnze, zone: Zone, couloir: Couloir
+    minute: int,
+    but: bool,
+    tireur: PositionOnze,
+    gardien_adverse: PositionOnze,
+    zone: Zone,
+    couloir: Couloir,
+    detail: str | None = None,
 ) -> Evenement:
     if but:
-        return Evenement(minute, TypeEvenement.BUT, tireur.joueur.id, None, zone, couloir)
-    return Evenement(minute, TypeEvenement.ARRET, gardien_adverse.joueur.id, tireur.joueur.id, zone, couloir)
+        return Evenement(minute, TypeEvenement.BUT, tireur.joueur.id, None, zone, couloir, detail=detail)
+    return Evenement(
+        minute, TypeEvenement.ARRET, gardien_adverse.joueur.id, tireur.joueur.id, zone, couloir, detail=detail
+    )
