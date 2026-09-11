@@ -28,10 +28,12 @@
     "age_seuil_jeunesse": 24
   },
   "profil_cible": {
+    "_note": "marge_amelioration_opportuniste (2026-09-11, ajoute) : hors docs/ia-gestion.md. Une fois tous les MANQUE d'un club combles, plus rien ne le faisait jamais prospecter a nouveau pour le reste de la fenetre (aucune notion de remplacement/renforcement opportuniste d'un titulaire deja adequat) — mesure sur les vraies donnees : 12 transferts pour toute une saison de 96 clubs actifs, largement sous les 2-7 arrivees/departs par club attendus en football reel. core.ai.besoins.evaluer_opportunites cree un besoin synthetique par titulaire deja au niveau, exigeant qu'un candidat le depasse d'au moins cette marge pour valoir une offre — assez pour exclure le bruit d'echelle (les decotes rotation/doublure sont 6/14), pas assez pour ne jamais se declencher.",
     "niveau_base": 42.0,
     "poids_reputation": 0.48,
     "decote_rotation": 6.0,
     "decote_doublure": 14.0,
+    "marge_amelioration_opportuniste": 6.0,
     "effectif_par_poste": {
       "GB": {"titulaires": 1, "rotations": 1, "doublures": 1},
       "DC": {"titulaires": 2, "rotations": 1, "doublures": 1},
@@ -76,10 +78,10 @@
       "bruit_ecart_type": 0.05
     },
     "clubs_dormants": {
-      "_note": "Les ~25900 clubs non simules forment le marche exterieur.",
+      "_note": "Les ~25900 clubs non simules forment le marche exterieur. probabilite_demarchage_par_tour (2026-09-11, renommee et cablee — etait probabilite_demarchage_par_fenetre, definie depuis la construction initiale de la boucle de mercato mais jamais utilisee) : tiree une fois par TOUR et par besoin SURPLUS, pas une fois par fenetre malgre l'ancien nom — 're-tirer a chaque tour' est ce qui rend un club qui reste longtemps avec un surplus de plus en plus susceptible d'etre demarche, plutot qu'une seule chance binaire au debut de la fenetre. Calibree par mesure directe (simulation d'une saison sur les vraies donnees) pour viser un volume de sortie qui, combine aux achats, atteigne la fourchette 2-7 mouvements/club/saison observee en football reel — voir docs/ia-gestion.md, section mercato.",
       "probabilite_acceptation_offre_au_prix": 0.80,
       "multiplicateur_prix_demande": 1.15,
-      "probabilite_demarchage_par_fenetre": 0.12,
+      "probabilite_demarchage_par_tour": 0.002,
       "part_cible_transferts_entrants": 0.32
     }
   },

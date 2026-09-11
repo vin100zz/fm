@@ -9,7 +9,7 @@ from core.domain.etat_joueur import Blessure, Gravite, Suspension
 from core.domain.etat_match import EtatMatch
 from core.domain.fourchette import Fourchette
 from core.domain.geometrie import Couloir, Zone
-from core.domain.historique import Historique, SaisonTerminee, TransfertHistorique
+from core.domain.historique import Historique, LigneHistoriqueJoueur, SaisonTerminee, TransfertHistorique
 from core.domain.journal import EvenementJour, TypeEvenementJour
 from core.domain.joueur import Joueur
 from core.domain.match import Evenement, Journee, Match, ResultatMatch, StatsEquipe, TypeEvenement
@@ -37,6 +37,7 @@ __all__ = [
     "Journee",
     "Joueur",
     "LigneClassement",
+    "LigneHistoriqueJoueur",
     "Match",
     "Monde",
     "Negociation",

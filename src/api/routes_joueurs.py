@@ -2,19 +2,30 @@
 docs/ui.md. `lister` searches the full ~32 000-player population
 (active and dormant), always paginated.
 
-"Saison en cours" (matches, minutes, buts, passes, cartons) and
-"Historique" aren't in `VueJoueurDetail`: nothing aggregates a
-player's events across matches yet, and there's no season-boundary to
-close a season's stats against.
+"Saison en cours" (minutes, passes décisives, cartons) reste hors
+périmètre : les minutes ne sont pas suivies du tout
+(core/world/saison.py) et une passe décisive n'est qu'une convention
+d'adjacence interne au moteur (tir immédiatement suivi d'un but), pas un
+événement dédié — voir core/world/historique_joueur.py. "Historique"
+(matches, buts, note moyenne, transfert par saison) est implémenté
+depuis là.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.etat_serveur import EtatServeur, obtenir_etat
 from api.pagination import Page, paginer
-from api.vues import VueJoueurDetail, VueJoueurLigne, vue_joueur_detail, vue_joueur_ligne
+from api.vues import (
+    VueHistoriqueSaisonJoueur,
+    VueJoueurDetail,
+    VueJoueurLigne,
+    vue_historique_saison_joueur,
+    vue_joueur_detail,
+    vue_joueur_ligne,
+)
 from core.domain.joueur import Joueur
 from core.domain.poste import Poste
+from core.world.historique_joueur import historique_saisons
 from core.world.note_globale import note_globale
 
 routeur = APIRouter()
@@ -72,6 +83,13 @@ def detail_joueur(joueur_id: int, etat_serveur: EtatServeur = Depends(obtenir_et
     joueur = _recuperer_joueur(joueur_id, etat_serveur)
     club = etat_serveur.monde.clubs.get(joueur.club_id)
     return vue_joueur_detail(joueur, etat_serveur.monde.date, etat_serveur.cfg, club)
+
+
+@routeur.get("/{joueur_id}/historique", response_model=list[VueHistoriqueSaisonJoueur])
+def historique_joueur(joueur_id: int, etat_serveur: EtatServeur = Depends(obtenir_etat)) -> list[VueHistoriqueSaisonJoueur]:
+    _recuperer_joueur(joueur_id, etat_serveur)
+    monde = etat_serveur.monde
+    return [vue_historique_saison_joueur(ligne, monde) for ligne in historique_saisons(joueur_id, monde)]
 
 
 def _recuperer_joueur(joueur_id: int, etat_serveur: EtatServeur) -> Joueur:

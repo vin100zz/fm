@@ -41,7 +41,12 @@ def evaluer_besoins(club: Club, effectif: list[Joueur], cfg: Config) -> list[Bes
         for rang, niveau_attendu in enumerate(rangs_attendus):
             niveau_reel = note_globale(disponibles[rang], cfg.attributs) if rang < len(disponibles) else 0.0
             if niveau_reel < niveau_attendu:
-                besoins.append(Besoin(type=TypeBesoin.MANQUE, poste=poste, urgence=niveau_attendu - niveau_reel))
+                besoins.append(
+                    Besoin(
+                        type=TypeBesoin.MANQUE, poste=poste, urgence=niveau_attendu - niveau_reel,
+                        niveau_attendu=niveau_attendu,
+                    )
+                )
 
         for surplus in disponibles[len(rangs_attendus):]:
             besoins.append(
@@ -53,6 +58,45 @@ def evaluer_besoins(club: Club, effectif: list[Joueur], cfg: Config) -> list[Bes
 
     besoins.sort(key=lambda besoin: besoin.urgence, reverse=True)
     return besoins
+
+
+def evaluer_opportunites(club: Club, effectif: list[Joueur], cfg: Config) -> list[Besoin]:
+    """Speculative upgrade attempts on postes that already clear
+    `evaluer_besoins`' bar — without this, a club that has filled every
+    real MANQUE never prospects again for the rest of the mercato
+    window (measured: 12 transfers over a full season across 96 active
+    clubs, see config/ia_gestion.json -> profil_cible._note). Only the
+    titulaire ranks are considered, and only when actually occupied — an
+    empty titulaire slot is already a MANQUE (`evaluer_besoins`), not an
+    opportunity. Reuses `TypeBesoin.MANQUE` (same acceptance path in
+    `core.world.mercato._meilleur_candidat`) rather than adding a third
+    `TypeBesoin` for what is, mechanically, the same "does a candidat
+    clear this bar" check with a different bar.
+    """
+    cfg_pc = cfg.ia.profil_cible
+    cible = niveau_cible(club, cfg)
+
+    par_poste: dict[Poste, list[Joueur]] = {}
+    for joueur in effectif:
+        par_poste.setdefault(joueur.poste, []).append(joueur)
+
+    opportunites: list[Besoin] = []
+    for poste_code, profil in cfg_pc.effectif_par_poste.items():
+        poste = Poste(poste_code)
+        disponibles = sorted(par_poste.get(poste, []), key=lambda joueur: note_globale(joueur, cfg.attributs), reverse=True)
+        for rang in range(profil.titulaires):
+            if rang >= len(disponibles):
+                continue  # trou reel : deja un MANQUE via evaluer_besoins
+            niveau_reel = note_globale(disponibles[rang], cfg.attributs)
+            if niveau_reel < cible:
+                continue  # deja un MANQUE, pas une opportunite
+            opportunites.append(
+                Besoin(
+                    type=TypeBesoin.MANQUE, poste=poste, urgence=0.0,
+                    niveau_attendu=niveau_reel + cfg_pc.marge_amelioration_opportuniste,
+                )
+            )
+    return opportunites
 
 
 def rang_au_poste(joueur: Joueur, effectif: list[Joueur], cfg: Config) -> int:

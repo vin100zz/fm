@@ -28,8 +28,9 @@ chaque jour où `monde.date` tombe dans une fenêtre été/hiver
 simultanée pour les 96 clubs actifs, avec les négociations en cours
 persistées sur `Monde.negociations` (nouveau type `Negociation`) d'un tour à
 l'autre. Voir "Boucle de mercato" plus bas pour le détail (convergence en
-2 tours, garde-fous de budget/masse salariale, ce qui reste hors périmètre —
-agents libres, renouvellements, démarchage par les clubs dormants).
+2 tours, garde-fous de budget/masse salariale, calibration du volume —
+2.88 mouvements/club/saison mesuré, ce qui reste hors périmètre — agents
+libres, renouvellements).
 
 **Toujours hors périmètre** : l'orchestration hebdomadaire des
 renouvellements de contrat (§6) — la fonction `decision_renouvellement`
@@ -181,6 +182,60 @@ trois phases ci-dessous à la lettre, avec quelques écarts pratiques :
   Sans ça, un tour sur les 96 clubs actifs prenait ~15s (mesuré) au lieu de
   ~1.2s — un club dont l'effectif est déjà saturé (proche du plafond
   d'attribut) réévaluait en vain chacun de ses besoins à chaque tour.
+- **Critère d'acceptation d'un candidat, revu (2026-09-11)** : mesuré sur
+  les vraies données, seulement 12 transferts sur une saison complète des
+  96 clubs actifs (attendu : 2 à 7 arrivées/départs par club). Cause :
+  `_meilleur_candidat` n'acceptait un candidat que si `utilite()` — le
+  gain marginal du meilleur onze — était strictement positif ; or
+  `utilite()` passe par `core/engine/equipe.py::meilleure_affectation`,
+  une affectation **gloutonne** poste par poste, pas globalement
+  optimale — ajouter un candidat qui comble pourtant clairement le
+  besoin signalé peut faire glisser l'affectation gloutonne vers un
+  total légèrement (parfois nettement, jusqu'à -2 points sur l'échelle
+  1-100, mesuré) pire. Résultat : ~94% des tentatives de prospection ne
+  trouvaient "aucun candidat viable" alors qu'un candidat adéquat était
+  bien dans la liste courte. Le critère accepte désormais un candidat
+  qui **dépasse directement `besoin.niveau_attendu`** (le seuil que
+  `evaluer_besoins`/`evaluer_opportunites` a utilisé pour signaler le
+  besoin), en plus du critère `utilite() > 0` conservé comme alternative.
+  La fenêtre de recherche est aussi recentrée sur `besoin.niveau_attendu`
+  plutôt que sur le niveau cible générique du club (qui ne correspondait
+  pas au rang réellement visé — rotation/doublure/opportuniste ont un
+  niveau attendu différent du titulaire).
+- **Prospection opportuniste (2026-09-11, ajoutée)** : sans elle, un club
+  qui a comblé tous ses `MANQUE` ne prospectait plus jamais pour le reste
+  de la fenêtre — aucun mécanisme ne rouvrait de besoin en cours de
+  saison. `core/ai/besoins.py::evaluer_opportunites` génère, pour chaque
+  titulaire déjà au niveau, un besoin synthétique (même type `MANQUE`,
+  même circuit d'acceptation) exigeant qu'un candidat le dépasse d'au
+  moins `marge_amelioration_opportuniste` (6.0, config) — assez pour
+  ignorer le bruit d'échelle, pas assez pour ne jamais se déclencher.
+  Examinée après les vrais `MANQUE` (moins prioritaire), toujours bornée
+  par `tentatives_prospection_max`/`negociations_actives_max`.
+- **Vente proactive vers le marché extérieur (2026-09-11, ajoutée)** :
+  les deux points précédents ont fait passer le nombre de candidats
+  viables trouvés de 60 à 367 (mesuré, un tour) — mais 72% d'entre eux
+  restaient bloqués par `masse_salariale_max`, faute de marge : un club
+  n'avait jamais aucune raison de **vendre**, seulement d'acheter. Les
+  besoins `SURPLUS` existaient déjà (§3) mais rien n'agissait dessus.
+  `core/world/mercato.py::_demarcher_surplus` tire, à chaque tour et
+  pour chaque besoin `SURPLUS`, si un club dormant démarche ce joueur
+  (`clubs_dormants.probabilite_demarchage_par_tour`, 0.002 — renommée
+  et calibrée par mesure directe, elle existait depuis la construction
+  initiale de la boucle mais n'était jamais lue) ; en cas de succès, le
+  transfert se conclut sans négociation, même simplification que
+  `repondre_offre_dormant`. Résultat mesuré sur une saison complète :
+  **12 → 254 transferts** (fix précédent seul : 75), soit **2.88
+  mouvements par club actif** (arrivées + départs), dans la fourchette
+  2-7 visée.
+  **Bug trouvé en production (2026-09-11, corrigé le jour même)** : la
+  destination était d'abord choisie uniformément au hasard parmi les
+  clubs dormants sans vérifier son `budget_transfert` — repéré par
+  l'utilisateur (un club de 800 places au stade "achetant" un joueur à
+  130M€). Le tirage est désormais borné aux clubs dormants dont le
+  `budget_transfert` couvre le montant (`_clubs_dormants_tries_par_budget`,
+  trié une fois par tour, `bisect` par montant) ; sans club assez riche
+  disponible, le démarchage n'a simplement pas lieu ce tour.
 - **La négociation converge en au plus 2 tours** : `repondre_offre` est une
   fonction pure du montant offert, donc ré-offrir exactement le montant
   contré reproduit le même seuil et le franchit. `facteur_offre_initiale`
@@ -206,11 +261,8 @@ trois phases ci-dessous à la lettre, avec quelques écarts pratiques :
   l'acheteur et le crédite au `solde` du vendeur (si actif) — approximation
   du `ventes_realisees` de la formule de budget (§4), qui suppose un
   nouveau calcul de `revenus_saison` non modélisé ici.
-- **Hors périmètre, documenté dans `core/world/mercato.py`** : les clubs
-  dormants ne démarchent jamais (`clubs_dormants.probabilite_demarchage_par_fenetre`
-  existe en config, inutilisée) — seule la réponse réactive
-  (`repondre_offre_dormant`) est branchée ; pas d'agents libres (§ suivant,
-  aucun contrat n'expire jamais) ; pas de prêt, clause libératoire, ni
+- **Hors périmètre, documenté dans `core/world/mercato.py`** : pas
+  d'agents libres (§ suivant, aucun contrat n'expire jamais) ; pas de prêt, clause libératoire, ni
   d'échange (`TransfertSec` — argent comptant seulement, voir
   `RegleTransfert` dans `docs/architecture.md`).
 

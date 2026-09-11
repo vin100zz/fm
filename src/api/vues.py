@@ -10,7 +10,7 @@ from core.config.modeles.racine import Config
 from core.domain.classement import LigneClassement
 from core.domain.club import Club, StatutClub
 from core.domain.date import Date
-from core.domain.historique import TransfertHistorique
+from core.domain.historique import LigneHistoriqueJoueur, TransfertHistorique
 from core.domain.joueur import Joueur
 from core.domain.match import Match
 from core.domain.monde import Monde
@@ -142,6 +142,16 @@ class VueTransfert(BaseModel):
     saison: int
 
 
+class VueHistoriqueSaisonJoueur(BaseModel):
+    saison: int
+    club_id: int | None
+    club_nom: str | None
+    matches_joues: int
+    buts: int
+    note_moyenne: float
+    prix_transfert: int | None
+
+
 FAMILLES_ATTRIBUTS: dict[str, list[str]] = {
     "techniques": ["passe", "technique", "finition", "tacle", "jeu_tete"],
     "mentaux": ["vision", "placement", "sang_froid"],
@@ -251,6 +261,15 @@ def vue_transfert(transfert: TransfertHistorique, monde: Monde) -> VueTransfert:
         club_source_id=transfert.club_source_id, club_source_nom=club_source.nom if club_source else None,
         club_cible_id=transfert.club_cible_id, club_cible_nom=club_cible.nom if club_cible else None,
         montant=transfert.montant, saison=transfert.saison,
+    )
+
+
+def vue_historique_saison_joueur(ligne: LigneHistoriqueJoueur, monde: Monde) -> VueHistoriqueSaisonJoueur:
+    club = monde.clubs.get(ligne.club_id) if ligne.club_id is not None else None
+    return VueHistoriqueSaisonJoueur(
+        saison=ligne.saison, club_id=ligne.club_id, club_nom=club.nom if club else None,
+        matches_joues=ligne.matches_joues, buts=ligne.buts, note_moyenne=ligne.note_moyenne,
+        prix_transfert=ligne.prix_transfert,
     )
 
 

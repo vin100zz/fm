@@ -73,7 +73,7 @@ export async function renderListe(conteneur) {
 }
 
 export async function renderDetail(conteneur, id) {
-  const joueur = await api.joueur(id);
+  const [joueur, historique] = await Promise.all([api.joueur(id), api.historiqueJoueur(id)]);
   const etat = joueur.etat;
 
   const familles = Object.entries(joueur.attributs)
@@ -111,5 +111,26 @@ export async function renderDetail(conteneur, id) {
 
     <h2>Caractéristiques</h2>
     <div style="display:flex; flex-wrap:wrap; gap:12px;">${familles}</div>
+
+    <h2>Historique</h2>
+    <div id="historique-joueur"></div>
   `;
+
+  const conteneurHistorique = conteneur.querySelector("#historique-joueur");
+  if (!historique.length) {
+    conteneurHistorique.innerHTML = "<p>Aucun match joué.</p>";
+    return;
+  }
+  const colonnes = [
+    { cle: "saison", libelle: "Saison" },
+    {
+      cle: "club_nom", libelle: "Club",
+      format: (v, l) => (l.club_id ? `<a href="#/clubs/${l.club_id}">${echappe(v)}</a>` : "—"),
+    },
+    { cle: "matches_joues", libelle: "Matches" },
+    { cle: "buts", libelle: "Buts" },
+    { cle: "note_moyenne", libelle: "Note moyenne" },
+    { cle: "prix_transfert", libelle: "Transfert", format: (v) => (v ? `${v.toLocaleString("fr-FR")} €` : "—") },
+  ];
+  tableauTriable(conteneurHistorique, colonnes, historique);
 }

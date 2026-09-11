@@ -40,6 +40,7 @@ class ProfilCibleConfig:
     poids_reputation: float
     decote_rotation: float
     decote_doublure: float
+    marge_amelioration_opportuniste: float
     effectif_par_poste: dict[str, EffectifParPoste]
 
 
@@ -73,7 +74,7 @@ class ScoreJoueurConfig:
 class ClubsDormantsConfig:
     probabilite_acceptation_offre_au_prix: float
     multiplicateur_prix_demande: float
-    probabilite_demarchage_par_fenetre: float
+    probabilite_demarchage_par_tour: float
     part_cible_transferts_entrants: float
 
 

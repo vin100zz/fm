@@ -43,6 +43,7 @@ export const api = {
 
   joueurs: (params) => requete(avecParametres("/api/joueurs", params)),
   joueur: (id) => requete(`/api/joueurs/${id}`),
+  historiqueJoueur: (id) => requete(`/api/joueurs/${id}/historique`),
 
   match: (id) => requete(`/api/matches/${id}`),
 

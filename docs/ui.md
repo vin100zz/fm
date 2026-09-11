@@ -265,8 +265,24 @@ direct de `Club`, pas d'agrégation nécessaire.
 | Potentiel | **fourchette d'estimation**, jamais la valeur réelle |
 | État | blessure en cours et durée, fatigue, suspension, forme, moral |
 | Contrat | club, salaire hebdomadaire, date de fin, valeur de marché estimée |
-| Saison en cours | matches, minutes, buts, passes, note moyenne, cartons |
-| Historique | une ligne par saison ; transferts avec montants ; courbe de la note globale par saison |
+| Saison en cours | matches, minutes, buts, passes, note moyenne, cartons — **non implémenté**, voir "Historique" |
+| Historique | une ligne par saison **et par club** ; matches, buts, note moyenne, montant du transfert d'arrivée le cas échéant |
+
+**Historique (2026-09-11, implémenté)** : `GET /api/joueurs/{id}/historique`
+(`core/world/historique_joueur.py::historique_saisons`). Une ligne par
+`(saison, club)` plutôt que par saison seule — un joueur transféré en
+janvier a deux lignes la même saison, chacune avec ses propres matches/
+buts/note, la ligne d'arrivée portant le montant du transfert. Calculé
+à la demande depuis `Monde.matches` (jamais purgé, voir sa propre
+docstring) + `Historique.transferts` : pas de club stocké par match
+joué, seulement `Joueur.club_id` (actuel) et l'historique des
+transferts — le club à une date passée se reconstruit en remontant les
+transferts un par un depuis le club actuel (`_club_a_la_date`).
+**Minutes, passes décisives et cartons restent hors périmètre** :
+aucune minute n'est suivie (`core/world/saison.py`), et une passe
+décisive n'est qu'une convention d'adjacence interne au moteur (tir
+immédiatement suivi d'un but avec `joueur_secondaire_id`), pas un
+événement dédié qu'on pourrait agréger sans dupliquer cette heuristique.
 
 ### Match
 
@@ -328,7 +344,7 @@ GET  /api/competitions/{id}/historique    champion + classement final par saison
 
 GET  /api/joueurs?poste=&age_min=&age_max=&niveau_min=&nation=&club=&statut_club=&page=&tri=
 GET  /api/joueurs/{id}
-GET  /api/joueurs/{id}/historique         — non implémenté
+GET  /api/joueurs/{id}/historique         une ligne par saison et par club
 
 GET  /api/matches/{id}                    compte rendu complet
 

@@ -1,15 +1,45 @@
 import math
 from random import Random
 
+from core.ai.besoins import profondeur_utile
 from core.ai.valorisation import valeur
 from core.config import Config
 from core.config.modeles.monde import FenetreMercato
-from core.domain.club import PersonnaliteClub
+from core.domain.club import PersonnaliteClub, StatutClub
 from core.domain.date import Date
 from core.domain.negociation import Negociation
 from core.domain.poste import Poste
 from core.world.mercato import _dans_fenetre, avancer_mercato, fenetre_mercato_ouverte, tour_mercato
 from tests.unit.world.fabriques_domaine import des_attributs, un_club, un_joueur, un_monde
+
+
+class _RngDemarcheForce:
+    """Remplace le `Random` injecte pour forcer le tirage du demarchage
+    (`_demarcher_surplus`) a reussir de façon deterministe, plutot que
+    de chercher une graine qui tombe bien — meme principe que le
+    `RngFixe` de docs/architecture.md."""
+
+    def random(self) -> float:
+        return 0.0  # toujours < probabilite_demarchage_par_tour
+
+    def choice(self, sequence):
+        return sequence[0]
+
+    def gauss(self, mu: float, sigma: float) -> float:
+        return mu
+
+    def uniform(self, a: float, b: float) -> float:
+        return a
+
+
+class _RngDemarcheRefuse(_RngDemarcheForce):
+    """Meme principe, dans l'autre sens : garantit que le tirage du
+    demarchage echoue toujours, plutot que de compter sur une graine
+    reelle dont la probabilite de succes (faible, mais non nulle) rendrait
+    le test statistiquement flaky."""
+
+    def random(self) -> float:
+        return 0.999999
 
 AUTRES_POSTES = [Poste.GB, Poste.DC, Poste.DC, Poste.DL, Poste.DR, Poste.MOC, Poste.AILG, Poste.AILD, Poste.BU, Poste.BU]
 
@@ -131,6 +161,54 @@ class TestTourMercato:
 
         assert monde.negociations == []
         assert monde.joueurs[cible_id].club_id == 2
+
+
+class TestDemarchageSurplus:
+    def test_vend_un_surplus_au_marche_exterieur(self, cfg: Config) -> None:
+        club = un_club(id=1, reputation=10)  # cible basse : uniforme(60) ne cree que du surplus, pas de manque
+        club_dormant = un_club(id=99, statut=StatutClub.DORMANT, budget_transfert=10_000_000)
+        profondeur = profondeur_utile(Poste.BU, cfg)
+        effectif = [un_joueur(id=100 + i, poste=Poste.BU, club_id=1, attributs=_uniforme(60)) for i in range(profondeur + 1)]
+        surplus_id = effectif[-1].id  # dernier de l'effectif : le seul au-dela de la profondeur utile
+        monde = un_monde(date=Date(2026, 8, 10), clubs={1: club, 99: club_dormant}, joueurs={j.id: j for j in effectif})
+
+        journal = tour_mercato(monde, cfg, _RngDemarcheForce())
+
+        assert monde.joueurs[surplus_id].club_id == 99
+        assert any(e.type.value == "transfert" and e.joueur_id == surplus_id for e in journal)
+        assert len(monde.historique.transferts) == 1
+        transfert = monde.historique.transferts[0]
+        assert transfert.club_source_id == 1 and transfert.club_cible_id == 99
+
+    def test_ignore_un_club_dormant_trop_pauvre_pour_payer(self, cfg: Config) -> None:
+        """Bug rapporte en production : un club dormant minuscule
+        (budget_transfert quasi nul, comme un village a 800 places au
+        stade) "achetait" des joueurs a plusieurs dizaines de millions —
+        aucune verification de budget n'existait avant ce test."""
+        club = un_club(id=1, reputation=10)
+        club_dormant_pauvre = un_club(id=99, statut=StatutClub.DORMANT, budget_transfert=1)
+        profondeur = profondeur_utile(Poste.BU, cfg)
+        effectif = [un_joueur(id=100 + i, poste=Poste.BU, club_id=1, attributs=_uniforme(60)) for i in range(profondeur + 1)]
+        surplus_id = effectif[-1].id
+        monde = un_monde(date=Date(2026, 8, 10), clubs={1: club, 99: club_dormant_pauvre}, joueurs={j.id: j for j in effectif})
+
+        tour_mercato(monde, cfg, _RngDemarcheForce())
+
+        assert monde.joueurs[surplus_id].club_id == 1
+        assert monde.historique.transferts == []
+
+    def test_ne_demarche_pas_si_le_tirage_echoue(self, cfg: Config) -> None:
+        club = un_club(id=1, reputation=10)
+        club_dormant = un_club(id=99, statut=StatutClub.DORMANT, budget_transfert=10_000_000)
+        profondeur = profondeur_utile(Poste.BU, cfg)
+        effectif = [un_joueur(id=100 + i, poste=Poste.BU, club_id=1, attributs=_uniforme(60)) for i in range(profondeur + 1)]
+        surplus_id = effectif[-1].id
+        monde = un_monde(date=Date(2026, 8, 10), clubs={1: club, 99: club_dormant}, joueurs={j.id: j for j in effectif})
+
+        tour_mercato(monde, cfg, _RngDemarcheRefuse())
+
+        assert monde.joueurs[surplus_id].club_id == 1
+        assert monde.historique.transferts == []
 
     def test_negociation_existante_est_reprise_en_priorite(self, cfg: Config) -> None:
         monde, cible_id = _monde_avec_besoin_mc()
