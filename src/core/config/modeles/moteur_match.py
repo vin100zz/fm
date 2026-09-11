@@ -63,6 +63,7 @@ class TurnoverConfig:
 class CartonsConfig:
     probabilite_jaune_par_turnover_defensif: float
     probabilite_rouge_direct_par_turnover_defensif: float
+    facteur_risque_deja_averti: float
     poids_zone_defense: float
     poids_agressivite_tacle: float
 
@@ -83,6 +84,16 @@ class AnalytiqueConfig:
 
 
 @dataclass(frozen=True, slots=True, config=STRICT)
+class NoteMatchConfig:
+    bonus_but: float
+    bonus_passe_decisive: float
+    malus_carton_jaune: float
+    malus_carton_rouge: float
+    note_min: float
+    note_max: float
+
+
+@dataclass(frozen=True, slots=True, config=STRICT)
 class ConfigMoteur:
     chronologie: ChronologieConfig
     transitions: TransitionsConfig
@@ -94,3 +105,4 @@ class ConfigMoteur:
     cartons: CartonsConfig
     recalcul_notes: RecalculNotesConfig
     analytique: AnalytiqueConfig
+    note_match: NoteMatchConfig

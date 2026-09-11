@@ -4,6 +4,55 @@
 > Les tableaux ci-dessous documentent les valeurs initiales ; la source de
 > vérité est le JSON. Aucune constante ne doit apparaître dans le code.
 
+## État de l'implémentation (2026-09-11)
+
+Implémenté dans `src/core/world/progression.py` (progression/déclin) et
+`src/core/world/etats/` (`fatigue.py`, `forme.py`, `blessures.py`,
+`suspensions.py`), plus `src/core/world/appliquer_match.py` qui relie un
+`ResultatMatch` simulé à l'état persistant des joueurs — le moteur
+(`core/engine`) ne mute jamais un `Joueur` directement, il ne fait que
+produire des événements (voir "Mutation du monde" dans
+`docs/architecture.md`).
+
+**Ce qui manque encore une base de saison/calendrier pour être branché** :
+la récupération entre matches (`fatigue.recuperer`), la remise à zéro du
+cumul de jaunes en fin de saison (`suspensions.reinitialiser_saison`) et le
+décompte de suspension par match de la compétition, joué ou non
+(`suspensions.decrementer`) sont des fonctions pures, prêtes, mais rien ne
+les appelle encore — il n'existe pas de boucle de saison jour par jour.
+
+**Blessures en match : non implémentées, volontairement.** La formule est
+documentée par possession, mais sans mécanisme de remplacement
+(`AIController.decider_remplacement`, étape 7), une blessure en cours de
+match affaiblirait une équipe pour le reste du match exactement comme un
+carton rouge — ce qui ne représente pas ce qu'est une blessure. Seul le tirage
+quotidien hors match (indépendant de la fatigue) est implémenté.
+
+**Moral : non implémenté.** Sa dynamique dépend des résultats du club et de
+la satisfaction contractuelle — des concepts qui n'existent pas encore
+(IA de gestion, étape 7). `docs/ia-gestion.md` dit explicitement que le
+moral sert d'abord à alimenter l'IA des contrats, pas à modifier les
+résultats en match — pas de perte à le laisser de côté pour l'instant.
+
+**Fatigue en match : approximation.** `appliquer_resultat_match` applique la
+consommation de fatigue sur la durée nominale complète du match pour tout
+joueur noté, y compris un joueur expulsé tôt (les minutes réellement jouées
+par joueur ne sont pas suivies). Le recalcul des agrégats de zone aux
+paliers de fatigue (`recalcul_notes.palier_fatigue_minutes`) reste non
+implémenté — la fatigue est lue une fois au coup d'envoi par le moteur.
+
+**Notes de match : formule inventée**, absente des docs — voir
+`config/moteur_match.json → note_match` et `core/engine/match.py::_calculer_notes`.
+
+**Cartons : deux corrections trouvées en calibrant** (voir aussi
+`docs/moteur-match.md`) — le tirage du fautif est amorti (un plancher +1
+sur le poids d'implication) sinon la zone `DEFENSE`, de loin la plus
+fréquente, ne tire quasiment que sur les 2-3 défenseurs centraux ; et un
+joueur déjà averti ce match voit son risque de récidive réduit
+(`facteur_risque_deja_averti`), sans quoi un deuxième jaune sur le même
+joueur — donc une expulsion — devenait bien trop fréquent (paradoxe des
+anniversaires sur seulement 7-8 cartons par match).
+
 ## Pourquoi ces mécanismes sont obligatoires
 
 Sans eux, la sélection est un problème résolu : on aligne toujours son meilleur

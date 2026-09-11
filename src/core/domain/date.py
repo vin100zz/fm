@@ -1,5 +1,12 @@
-"""Game date value object. Never `datetime`: see CLAUDE.md conventions."""
+"""Game date value object. Never `datetime`: see CLAUDE.md conventions.
 
+`plus_jours`/`jours_jusqua` delegate to `datetime.date` internally purely
+for calendar arithmetic (month lengths, leap years) — never to read the
+system clock (no `datetime.now()`/`date.today()` anywhere here), which
+would break determinism.
+"""
+
+import datetime
 from dataclasses import dataclass
 
 
@@ -24,6 +31,15 @@ class Date:
 
     def plus_un_an(self) -> "Date":
         return Date(self.annee + 1, self.mois, self.jour)
+
+    def plus_jours(self, n: int) -> "Date":
+        resultat = datetime.date(self.annee, self.mois, self.jour) + datetime.timedelta(days=n)
+        return Date(resultat.year, resultat.month, resultat.day)
+
+    def jours_jusqua(self, autre: "Date") -> int:
+        depart = datetime.date(self.annee, self.mois, self.jour)
+        arrivee = datetime.date(autre.annee, autre.mois, autre.jour)
+        return (arrivee - depart).days
 
     def __str__(self) -> str:
         return f"{self.jour:02d}/{self.mois:02d}/{self.annee:04d}"

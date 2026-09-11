@@ -4,6 +4,25 @@
 > `config/demographie.json`. Les tableaux ci-dessous documentent les valeurs
 > initiales ; la source de vérité est le JSON.
 
+## État de l'implémentation (2026-09-11)
+
+"Progression et déclin" ci-dessous est implémenté dans
+`src/core/world/progression.py` (`progresser`, `facteur_par_age`) — voir
+`docs/etats-joueur.md` pour l'état d'ensemble de l'étape 6. `appliquer_delta`
+(non nommée dans ce document) ajoute le delta uniformément sur les 13
+attributs en croissance (ce qui augmente `note_globale` d'exactement ce
+delta, ses poids sommant à 1.0), et le repondère par
+`poids_declin_par_attribut` en décroissance. Une subtilité du formule
+documentée telle quelle : si `marge` (potentiel − niveau actuel) vaut 0,
+le terme d'âge s'annule et seul le bruit gaussien s'applique, même pour un
+joueur très âgé — un joueur exactement à son potentiel ne décline donc pas
+automatiquement par le seul effet de l'âge tant que le bruit ne le pousse
+pas en dessous. Pas retouché, c'est le comportement exact de la formule
+documentée.
+
+La génération de regens et le pilotage démographique ("Démographie" et
+sections suivantes) restent non implémentés — c'est l'étape 8, pas 6.
+
 ## Progression et déclin
 
 Même sans entraînement, le monde doit bouger. Sinon tout se fige en trois

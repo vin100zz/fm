@@ -11,7 +11,7 @@ from core.domain.geometrie import Couloir, Zone
 from core.domain.poste import Poste
 from core.engine.equipe import PositionOnze
 from core.engine.implication import TablesImplication
-from core.engine.selection_joueur import tirer_joueur_implique
+from core.engine.selection_joueur import tirage_pondere
 
 
 def determiner_carton(
@@ -21,6 +21,7 @@ def determiner_carton(
     tables: TablesImplication,
     cfg: CartonsConfig,
     rng: Random,
+    deja_avertis: frozenset[int] = frozenset(),
 ) -> tuple[PositionOnze, str] | None:
     # Excludes the goalkeeper: a keeper sent off would leave nobody in
     # goal in this simplified model (no reassigning an outfield player
@@ -29,12 +30,19 @@ def determiner_carton(
     onze_sans_gardien = tuple(position for position in onze_defenseur if position.poste is not Poste.GB)
     if not onze_sans_gardien:
         return None
-    fauteur = tirer_joueur_implique(onze_sans_gardien, zone, couloir, tables, phase_attaque=False, rng=rng)
+    fauteur = _tirer_fauteur(onze_sans_gardien, zone, couloir, tables, rng)
 
     poids_zone = cfg.poids_zone_defense if zone is Zone.DEFENSE else 1.0
     poids_agressivite = 1.0 + cfg.poids_agressivite_tacle * fauteur.joueur.attributs.tacle
+    # A player already booked this match plays more carefully — real
+    # referees also rarely book the same player twice in open play, and
+    # this model has neither that caution nor a substitution to remove
+    # them. Without dialing the risk down, a second yellow for the same
+    # player is far too common: with only ~7-8 cards in a whole match,
+    # a repeat is a birthday-paradox near-certainty even with a fair draw.
+    poids_deja_averti = cfg.facteur_risque_deja_averti if fauteur.joueur.id in deja_avertis else 1.0
     p_rouge = cfg.probabilite_rouge_direct_par_turnover_defensif * poids_zone * poids_agressivite
-    p_jaune = cfg.probabilite_jaune_par_turnover_defensif * poids_zone * poids_agressivite
+    p_jaune = cfg.probabilite_jaune_par_turnover_defensif * poids_zone * poids_agressivite * poids_deja_averti
 
     tirage = rng.random()
     if tirage < p_rouge:
@@ -42,3 +50,20 @@ def determiner_carton(
     if tirage < p_rouge + p_jaune:
         return fauteur, "jaune"
     return None
+
+
+def _tirer_fauteur(
+    onze: tuple[PositionOnze, ...], zone: Zone, couloir: Couloir, tables: TablesImplication, rng: Random
+) -> PositionOnze:
+    """Weighted by defensive implication like note_zone (docs), with a
+    flat +1 floor so a player with near-zero implication in this exact
+    zone/couloir (e.g. a full-back on the far side) still has some
+    chance — otherwise Zone.DEFENSE, by far the most common turnover
+    zone, ends up drawing from only the 2-3 centre-backs who carry
+    almost all the raw weight there.
+    """
+    poids = {
+        index: 1.0 + tables.implication(position.poste, zone, couloir, phase_attaque=False)
+        for index, position in enumerate(onze)
+    }
+    return onze[tirage_pondere(poids, rng)]

@@ -38,7 +38,7 @@ def un_joueur(**overrides) -> Joueur:
     valeurs = dict(
         id=100, nom="Nom", prenom="Prenom", nationalite="FRA", date_naissance=Date(2000, 1, 1),
         poste=Poste.MC, attributs=des_attributs(), potentiel=60,
-        forme=1.0, fatigue=1.0, moral=0.6,
+        forme=1.0, fatigue=1.0, moral=0.6, fragilite=1.0,
         club_id=1, contrat=Contrat(salaire_hebdo=10_000, date_fin=Date(2028, 6, 30), date_signature=DATE),
     )
     valeurs.update(overrides)

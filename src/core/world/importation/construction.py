@@ -11,7 +11,6 @@ perimetre.py or validation.py.
 import math
 from random import Random
 
-from core.config.modeles.commun import PalierAge
 from core.config.modeles.ia_gestion import BudgetsConfig, PersonnaliteClubConfig, ValorisationConfig
 from core.config.modeles.import_donnees import SyntheseAttributsConfig, SyntheseClubConfig
 from core.config.modeles.monde import ConfigMonde
@@ -25,6 +24,7 @@ from core.domain.poste import Poste
 from core.world.generation_attributs import generer_attributs_depuis_niveau
 from core.world.importation.perimetre import determiner_statut, trouver_competition
 from core.world.importation.postes_fm import parser_postes
+from core.world.progression import facteur_par_age
 
 _LONGUEUR_MAX_NOM_COURT = 20
 
@@ -155,6 +155,7 @@ def construire_joueur(
         forme=cfg.etats.forme.initiale,
         fatigue=cfg.etats.fatigue.initiale,
         moral=cfg.etats.moral.initial,
+        fragilite=rng.uniform(cfg.etats.blessures.fragilite_min, cfg.etats.blessures.fragilite_max),
         postes_secondaires=postes_secondaires,
         club_id=club_id,
         contrat=contrat,
@@ -174,18 +175,6 @@ def _valeur_marche(brut: str) -> float | None:
     return float(valeur) if valeur > 0 else None
 
 
-def _facteur_age(age: int, paliers: list[PalierAge]) -> float:
-    """Step lookup, no interpolation: good enough for the v0 synthesis.
-    docs/ia-gestion.md asks for linear interpolation between paliers —
-    implement that for real in step 7 (ia_gestion), where it drives
-    actual valuations rather than a one-off level guess.
-    """
-    for palier in paliers:
-        if palier.age_min <= age <= palier.age_max:
-            return palier.facteur
-    return paliers[0].facteur if age < paliers[0].age_min else paliers[-1].facteur
-
-
 def _niveau_depuis_valeur(
     valeur_marche: float | None,
     age: int,
@@ -202,7 +191,7 @@ def _niveau_depuis_valeur(
     if valeur_marche is None:
         return plage.min
 
-    facteur_age = _facteur_age(age, cfg_valorisation.courbe_age)
+    facteur_age = facteur_par_age(age, cfg_valorisation.courbe_age)
     rarete = cfg_valorisation.rarete_poste.get(poste.value, 1.0)
     denominateur = cfg_valorisation.base_euros * facteur_age * rarete
     if denominateur <= 0:

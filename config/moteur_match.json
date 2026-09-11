@@ -44,8 +44,10 @@
     "duree_malus_possessions": 1
   },
   "cartons": {
+    "_note": "facteur_risque_deja_averti : un joueur deja averti ce match joue plus prudemment (le modele n'a ni prudence comportementale ni remplacement pour l'ecarter) - sans ce facteur, le second jaune sur le meme joueur est beaucoup trop frequent (paradoxe des anniversaires sur ~7-8 cartons par match).",
     "probabilite_jaune_par_turnover_defensif": 0.0075,
     "probabilite_rouge_direct_par_turnover_defensif": 0.00025,
+    "facteur_risque_deja_averti": 0.05,
     "poids_zone_defense": 1.4,
     "poids_agressivite_tacle": 0.006
   },
@@ -61,5 +63,14 @@
     "sensibilite_ecart_force": 0.045,
     "bonus_domicile_buts": 0.225,
     "buts_attendus_min": 0.10
+  },
+  "note_match": {
+    "_note": "Note de match par joueur (docs/moteur-match.md ne donne pas de formule) : ajustements autour de etats.forme.note_reference, utilises ensuite par maj_forme.",
+    "bonus_but": 1.0,
+    "bonus_passe_decisive": 0.5,
+    "malus_carton_jaune": -0.5,
+    "malus_carton_rouge": -2.0,
+    "note_min": 1.0,
+    "note_max": 10.0
   }
 }

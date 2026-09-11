@@ -24,9 +24,11 @@ class Joueur:
     forme: float
     fatigue: float
     moral: float
+    fragilite: float  # 0.6-1.8, drawn once at creation and stable — docs/etats-joueur.md
 
     postes_secondaires: dict[Poste, float] = field(default_factory=dict)
     blessure: Blessure | None = None
     suspension: Suspension | None = None
     club_id: int | None = None
     contrat: Contrat | None = None
+    cartons_jaunes_saison: int = 0

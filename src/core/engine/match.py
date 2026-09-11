@@ -1,17 +1,27 @@
 """MoteurPossession: orchestrates a full match possession by possession.
 See "Structure de la simulation" in docs/moteur-match.md.
 
-Deliberately out of scope for this pass (documented, not silently
-skipped): in-match fatigue/forme/moral evolution (forme/fatigue/moral
-are read once, at kickoff, from each Joueur — the full dynamics belong
-to step 6), player substitutions (need AIController.decider_remplacement,
-step 7), injuries, and hauteur de bloc's effect on recovery zone /
-vulnerability to the counter (accepted on Equipe, not yet consumed).
-A red card still weakens a side for real: removing a player from onze
-and recomputing notes_zones lets facteur_densite do the work, exactly
-as docs prescribes — "aucun malus artificiel à ajouter" (the goalkeeper
-is excluded from ever being sent off, see cartons.py — this model has
-no way to put an outfield player in goal instead).
+`ResultatMatch.notes` is filled in (step 6) — see `_calculer_notes` for
+the rating formula, invented since docs doesn't give one. forme/fatigue
+updates from those notes, and card-driven suspensions, are applied
+*after* the match by core/world/appliquer_match.py, not here: the
+engine returns events, it never mutates a Joueur's persistent state
+directly (see "Mutation du monde" in docs/architecture.md) — the one
+exception is a red card's immediate effect on `onze` *within this one
+match*, which isn't persistent state.
+
+Deliberately still out of scope (documented, not silently skipped):
+mid-match forme/fatigue dynamics (read once at kickoff; recalculating
+notes_zones at fatigue paliers, per docs, needs that first), player
+substitutions (need AIController.decider_remplacement, step 7),
+in-match injuries (core/world/etats/blessures.py explains why), and
+hauteur de bloc's effect on recovery zone / vulnerability to the
+counter (accepted on Equipe, not yet consumed). A red card still
+weakens a side for real: removing a player from onze and recomputing
+notes_zones lets facteur_densite do the work, exactly as docs
+prescribes — "aucun malus artificiel à ajouter" (the goalkeeper is
+excluded from ever being sent off, see cartons.py — this model has no
+way to put an outfield player in goal instead).
 """
 
 from random import Random
@@ -35,6 +45,7 @@ class _EtatCote:
     """
 
     def __init__(self, equipe: Equipe, notes: NotesEquipe) -> None:
+        self.onze_initial = equipe.onze
         self.equipe = equipe
         self.notes = notes
         self.tirs = 0
@@ -43,6 +54,7 @@ class _EtatCote:
         self.cartons_jaunes = 0
         self.cartons_rouges = 0
         self.possessions = 0
+        self.jaunes_en_match: dict[int, int] = {}
 
 
 class MoteurPossession:
@@ -106,14 +118,16 @@ class MoteurPossession:
                         continue
 
             carton = determiner_carton(
-                resultat.zone_fin, resultat.couloir_fin, defenseur.equipe.onze, tables, cfg.moteur.cartons, rng
+                resultat.zone_fin, resultat.couloir_fin, defenseur.equipe.onze, tables, cfg.moteur.cartons, rng,
+                deja_avertis=frozenset(defenseur.jaunes_en_match),
             )
             if carton is not None:
                 fauteur, couleur = carton
+                detail = self._enregistrer_carton(defenseur, fauteur, couleur)
                 evenements.append(
-                    Evenement(minute, TypeEvenement.CARTON, fauteur.joueur.id, None, resultat.zone_fin, resultat.couloir_fin, detail=couleur)
+                    Evenement(minute, TypeEvenement.CARTON, fauteur.joueur.id, None, resultat.zone_fin, resultat.couloir_fin, detail=detail)
                 )
-                if couleur == "rouge":
+                if detail != "jaune":
                     defenseur.cartons_rouges += 1
                     self._expulser(defenseur, fauteur, tables, cfg)
                 else:
@@ -128,7 +142,7 @@ class MoteurPossession:
             evenements=evenements,
             stats_dom=self._stats(etats[True], etats[False]),
             stats_ext=self._stats(etats[False], etats[True]),
-            notes={},
+            notes=self._calculer_notes(evenements, etats[True].onze_initial, etats[False].onze_initial, cfg),
         )
 
     @staticmethod
@@ -165,6 +179,65 @@ class MoteurPossession:
                 etat.xg += xg
                 if evenement.detail == "corner":
                     etat.corners += 1
+
+    @staticmethod
+    def _enregistrer_carton(etat: "_EtatCote", fauteur: PositionOnze, couleur: str) -> str:
+        """A direct red is "rouge_directe"; a second yellow for the same
+        player in this match is an automatic "rouge_deuxieme_jaune" —
+        docs/etats-joueur.md. The two carry different suspension lengths
+        downstream (core/world/etats/suspensions.py), hence the distinct
+        detail strings rather than just "rouge".
+        """
+        if couleur == "rouge":
+            return "rouge_directe"
+        compte = etat.jaunes_en_match.get(fauteur.joueur.id, 0) + 1
+        etat.jaunes_en_match[fauteur.joueur.id] = compte
+        return "rouge_deuxieme_jaune" if compte >= 2 else "jaune"
+
+    @staticmethod
+    def _calculer_notes(
+        evenements: list[Evenement],
+        onze_dom: tuple[PositionOnze, ...],
+        onze_ext: tuple[PositionOnze, ...],
+        cfg: Config,
+    ) -> dict[int, float]:
+        """No rating formula is given in docs/moteur-match.md — this
+        starts every player at `etats.forme.note_reference` (the same
+        "neutral" point forme's own formula centers on) and applies the
+        adjustments in config/moteur_match.json -> note_match. An assist
+        is credited to the TIR event's joueur_secondaire_id immediately
+        preceding a BUT event (the crosser, for a headed goal).
+        """
+        cfg_note = cfg.moteur.note_match
+        ajustements: dict[int, float] = {}
+
+        def ajouter(joueur_id: int, valeur: float) -> None:
+            ajustements[joueur_id] = ajustements.get(joueur_id, 0.0) + valeur
+
+        for index, evenement in enumerate(evenements):
+            if evenement.type is TypeEvenement.BUT:
+                ajouter(evenement.joueur_id, cfg_note.bonus_but)
+                precedent = evenements[index - 1] if index > 0 else None
+                if (
+                    precedent is not None
+                    and precedent.type is TypeEvenement.TIR
+                    and precedent.joueur_secondaire_id is not None
+                ):
+                    ajouter(precedent.joueur_secondaire_id, cfg_note.bonus_passe_decisive)
+            elif evenement.type is TypeEvenement.CARTON:
+                if evenement.detail == "jaune":
+                    ajouter(evenement.joueur_id, cfg_note.malus_carton_jaune)
+                else:
+                    ajouter(evenement.joueur_id, cfg_note.malus_carton_rouge)
+
+        tous_les_joueurs = {position.joueur.id for position in onze_dom} | {
+            position.joueur.id for position in onze_ext
+        }
+        reference = cfg.etats.forme.note_reference
+        return {
+            joueur_id: min(max(reference + ajustements.get(joueur_id, 0.0), cfg_note.note_min), cfg_note.note_max)
+            for joueur_id in tous_les_joueurs
+        }
 
     @staticmethod
     def _expulser(etat: "_EtatCote", fauteur: PositionOnze, tables, cfg: Config) -> None:

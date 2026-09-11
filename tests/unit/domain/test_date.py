@@ -28,3 +28,19 @@ def test_ordre() -> None:
     assert Date(2025, 1, 1) < Date(2026, 1, 1)
     assert Date(2026, 1, 1) < Date(2026, 2, 1)
     assert Date(2026, 2, 1) < Date(2026, 2, 2)
+
+
+def test_plus_jours_traverse_un_changement_de_mois() -> None:
+    assert Date(2026, 1, 25).plus_jours(10) == Date(2026, 2, 4)
+
+
+def test_plus_jours_traverse_une_annee_bissextile() -> None:
+    assert Date(2024, 2, 20).plus_jours(10) == Date(2024, 3, 1)
+
+
+def test_jours_jusqua() -> None:
+    assert Date(2026, 1, 1).jours_jusqua(Date(2026, 1, 11)) == 10
+
+
+def test_jours_jusqua_negatif_si_anterieur() -> None:
+    assert Date(2026, 1, 11).jours_jusqua(Date(2026, 1, 1)) == -10

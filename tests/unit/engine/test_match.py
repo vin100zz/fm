@@ -47,7 +47,8 @@ class TestMoteurPossession:
             assert 0 <= resultat.buts_ext < 15
             assert resultat.stats_dom.tirs is not None and resultat.stats_dom.tirs >= 0
             assert resultat.stats_dom.possession_pct is not None
-            assert resultat.notes == {}
+            assert len(resultat.notes) == len(dom.onze) + len(ext.onze)
+            assert all(1.0 <= note <= 10.0 for note in resultat.notes.values())
 
     def test_temps_sous_20ms_en_moyenne(self, cfg: Config, psg_toulouse) -> None:
         dom, ext = psg_toulouse
