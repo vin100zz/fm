@@ -5,6 +5,7 @@ renouvellements" in docs/ia-gestion.md.
 
 from dataclasses import dataclass
 
+from core.ai.besoins import niveau_cible
 from core.ai.utilite import utilite
 from core.ai.valorisation import valeur
 from core.config.modeles.ia_gestion import ContratsConfig
@@ -65,6 +66,21 @@ def decision_renouvellement(
     the club under its (strict, per garde_fous) wage cap", reusing the
     club's actual wage bill from `effectif` rather than inventing a
     separate cost/duration amortisation model.
+
+    **Renews if the player still clears the club's general level bar,
+    not just if `utilite() > 0` (2026-09-11, revised)**: same root cause
+    as `core/world/mercato.py::_meilleur_candidat`'s acceptance
+    criterion — `utilite()` routes through `meilleure_affectation`, a
+    *greedy* per-slot assignment, so a squad already saturated with
+    excellent players (Real Madrid, Barcelona, Man City-caliber
+    depth) can show ~0 or negative marginal gain from keeping ONE more
+    great player, even though they plainly deserve their spot. Measured
+    on the real dataset: elite clubs collapsed to single-digit squads
+    over 4 simulated seasons specifically because their own best
+    players kept failing this check and expired into free agency for
+    nothing. Kept as an OR, not a replacement, so a squad-depth player
+    who doesn't clear the bar can still be renewed on genuine marginal
+    value.
     """
     cfg_c = cfg.ia.contrats
     assert joueur.contrat is not None
@@ -90,7 +106,8 @@ def decision_renouvellement(
         not cfg.ia.garde_fous.plafond_salarial_strict
         or masse_salariale_sans + salaire_demande <= club.masse_salariale_max
     )
-    renouvelle = sous_plafond and utilite(joueur, club, effectif, date_actuelle, cfg) > 0
+    comble_le_niveau = note_globale(joueur, cfg.attributs) >= niveau_cible(club, cfg)
+    renouvelle = sous_plafond and (comble_le_niveau or utilite(joueur, club, effectif, date_actuelle, cfg) > 0)
 
     return DecisionRenouvellement(
         ouvre_negociation=True, renouvelle=renouvelle, salaire_demande=salaire_demande, duree_annees=duree_annees

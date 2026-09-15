@@ -15,9 +15,22 @@ events across a season yet (see docs/ui.md).
 `core/world/historique_joueur.py::historique_saisons`, computed on
 demand from `Historique.transferts` plus `Monde.matches` for the
 "Historique" section of la fiche joueur (docs/ui.md).
+
+`MouvementEffectif`/`MouvementFinancier` (2026-09-12, ajoutés, demande
+explicite de l'utilisateur) persistent des événements que le journal du
+jour (`core/domain/journal.py`) ne fait que traverser (`GET
+/api/monde/journal` n'expose que le dernier jour produit) — nécessaire
+pour l'onglet "Transferts" (fins de contrat, retraites, promotions
+centre de formation) et l'onglet "Budget" (historique financier) d'une
+fiche club, qui doivent pouvoir remonter dans le temps. `nom`/`prenom`
+sont dénormalisés sur `MouvementEffectif` : un joueur à la retraite est
+supprimé de `Monde.joueurs` (`core/world/demographie/cycle_annuel.py`),
+donc son nom ne serait plus consultable autrement une fois l'événement
+passé.
 """
 
 from dataclasses import dataclass, field
+from enum import Enum
 
 from core.domain.classement import LigneClassement
 from core.domain.date import Date
@@ -46,10 +59,44 @@ class SaisonTerminee:
         return self.classement_final[0].club_id
 
 
+class TypeMouvementEffectif(Enum):
+    FIN_CONTRAT = "fin_contrat"
+    RETRAITE = "retraite"
+    PROMOTION = "promotion"
+
+
+@dataclass(frozen=True, slots=True)
+class MouvementEffectif:
+    type: TypeMouvementEffectif
+    date: Date
+    joueur_id: int
+    nom: str
+    prenom: str
+    club_id: int
+    saison: int = 1
+
+
+class TypeMouvementFinancier(Enum):
+    REVENU_MENSUEL = "revenu_mensuel"
+    SALAIRES = "salaires"
+    PRIME_CLASSEMENT = "prime_classement"
+
+
+@dataclass(frozen=True, slots=True)
+class MouvementFinancier:
+    type: TypeMouvementFinancier
+    date: Date
+    club_id: int
+    montant: int  # signe conserve : positif = revenu, negatif = depense
+    saison: int = 1
+
+
 @dataclass(slots=True)
 class Historique:
     transferts: list[TransfertHistorique] = field(default_factory=list)
     palmares: list[SaisonTerminee] = field(default_factory=list)
+    mouvements_effectif: list[MouvementEffectif] = field(default_factory=list)
+    mouvements_financiers: list[MouvementFinancier] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)

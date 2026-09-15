@@ -36,14 +36,26 @@ Plus deux ajouts à des fichiers existants pour le marché extérieur :
 `core/world/progression.py::progresser_dormant` et
 `core/ai/mercato.py::repondre_offre_dormant`.
 
-**Volontairement hors périmètre**, comme pour l'étape 7 : rien n'appelle
-encore ces fonctions selon un calendrier — pas de boucle de saison, donc
-pas de "chaque été" pour la correction démographique, pas de date fixe
-mi-juin pour les centres de formation (`config/monde.json ->
-dates_cles.promotion_centre_formation` existe, n'est consommé nulle
-part), pas de suppression effective d'un `Joueur` à la retraite
-(`probabilite_retraite` est une fonction pure ; rien ne retire encore un
-joueur du monde). Le flux entre monde actif et dormant
+**Retraites et promotions du centre de formation câblées sur un
+calendrier (2026-09-12, ajouté, demande explicite de l'utilisateur)** —
+`core/world/demographie/cycle_annuel.py::appliquer_cycle_annuel_effectif`,
+appelé depuis `core/world/saison.py::avancer_un_jour`, une fois par an à
+`config/monde.json -> dates_cles.promotion_centre_formation` (15 juin,
+la date que ce document nommait déjà sans qu'elle serve nulle part).
+`probabilite_retraite` (pure depuis l'étape 8) retire désormais pour de
+vrai un joueur du monde (`del Monde.joueurs[...]`) quand le tirage
+tombe dessous, pour tout joueur d'un club actif ; `promouvoir_centre_formation`
+(pure depuis l'étape 8) alimente chaque club actif en jeunes joueurs. Les
+deux événements sont journalisés dans `Monde.historique.mouvements_effectif`
+(nouveau, `core/domain/historique.py`) pour l'onglet "Transferts" d'une
+fiche club (`docs/ui.md`), aux côtés des départs libres en fin de contrat
+(`liberer_contrats_expires`, désormais lui aussi journalisé de la même
+façon). **Reste volontairement hors périmètre** : la boucle de
+rétroaction démographique complète (`cohorte.py`, comparer la population
+observée à la cible par tranche) — seuls les événements *par club actif*
+nécessaires à l'onglet Transferts sont câblés, pas le rééquilibrage de
+l'ensemble de la population des ~32 000 joueurs, un chantier séparé et
+plus large. Le flux entre monde actif et dormant
 (`docs/modele-donnees.md`, `part_transferts_depuis_dormants`) n'est pas
 mesuré non plus, faute de boucle de mercato pour le produire (voir
 `docs/ia-gestion.md`).

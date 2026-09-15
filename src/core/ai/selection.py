@@ -5,9 +5,13 @@ core/engine/equipe.py::composition_depuis_effectif explicitly deferred
 until an AIController existed.
 """
 
+from itertools import count
+
 from core.config.modeles.racine import Config
 from core.config.modeles.ia_gestion import SelectionConfig
+from core.domain.attributs import NOMS_ATTRIBUTS, Attributs
 from core.domain.club import Club
+from core.domain.date import Date
 from core.domain.etat_match import EtatMatch
 from core.domain.joueur import Joueur
 from core.domain.poste import Poste
@@ -19,15 +23,24 @@ from core.world.note_globale import note_globale
 POSTES_OFFENSIFS = frozenset({Poste.BU, Poste.AILG, Poste.AILD, Poste.MOC})
 POSTES_DEFENSIFS = frozenset({Poste.GB, Poste.DC, Poste.DL, Poste.DR, Poste.MDC})
 
+# IDs negatifs pour les joueurs "Dummy" (jamais utilises par un vrai
+# Joueur — Monde.prochain_id ne descend jamais sous 1). Un compteur
+# module-level mutable est d'ordinaire a eviter dans core/ (determinisme),
+# mais la VALEUR de cet id n'influence jamais rien de simule (buts, notes,
+# resultat) — seule l'identite du joueur choisi pour chaque poste compte,
+# et elle est deja déterminée par _score_selection avant que l'id ne soit
+# attribue. Voir _joueur_dummy.
+_COMPTEUR_DUMMY = count(start=-1, step=-1)
+
 
 def choisir_composition(club: Club, effectif: list[Joueur], adversaire: Club, domicile: bool, cfg: Config) -> Equipe:
     disponibles = [joueur for joueur in effectif if joueur.blessure is None and joueur.suspension is None]
 
     formation = club.formation_preferee
     if len(disponibles) < cfg.monde.regles_match.joueurs_sur_terrain:
-        formation = _meilleure_formation_disponible(disponibles, cfg)
+        formation = _meilleure_formation_disponible(disponibles, cfg, effectif)
 
-    onze = _selectionner_onze(disponibles, formation, cfg.ia.selection, cfg)
+    onze = _selectionner_onze(disponibles, formation, cfg.ia.selection, cfg, effectif)
     joueurs_onze = [position.joueur for position in onze]
 
     return Equipe(
@@ -51,11 +64,12 @@ def _score_selection(joueur: Joueur, poste_slot: Poste, cfg_sel: SelectionConfig
 
 
 def _selectionner_onze(
-    disponibles: list[Joueur], formation: str, cfg_sel: SelectionConfig, cfg: Config
+    disponibles: list[Joueur], formation: str, cfg_sel: SelectionConfig, cfg: Config, effectif_reference: list[Joueur]
 ) -> list[PositionOnze]:
     slots = [Poste(code) for code in cfg.formations.formations[formation]]
     onze: list[PositionOnze] = []
     deja_choisis: set[int] = set()
+    niveau_dummy = _niveau_dummy(effectif_reference, cfg)
 
     for poste_slot in slots:
         candidats = sorted(
@@ -63,25 +77,58 @@ def _selectionner_onze(
             key=lambda joueur: _score_selection(joueur, poste_slot, cfg_sel, cfg),
             reverse=True,
         )
-        choisi = candidats[0]
-        # Rotation (docs/ia-gestion.md §8.4): a tired starter with a
-        # near-equal backup rests, rather than always fielding the
-        # nominal best XI regardless of fitness.
-        if len(candidats) > 1 and choisi.fatigue < cfg_sel.seuil_rotation_fatigue:
-            doublure = candidats[1]
-            ecart = note_globale(choisi, cfg.attributs) - note_globale(doublure, cfg.attributs)
-            if ecart <= cfg_sel.ecart_niveau_acceptable_rotation:
-                choisi = doublure
+        if candidats:
+            choisi = candidats[0]
+            # Rotation (docs/ia-gestion.md §8.4): a tired starter with a
+            # near-equal backup rests, rather than always fielding the
+            # nominal best XI regardless of fitness.
+            if len(candidats) > 1 and choisi.fatigue < cfg_sel.seuil_rotation_fatigue:
+                doublure = candidats[1]
+                ecart = note_globale(choisi, cfg.attributs) - note_globale(doublure, cfg.attributs)
+                if ecart <= cfg_sel.ecart_niveau_acceptable_rotation:
+                    choisi = doublure
+        else:
+            choisi = _joueur_dummy(poste_slot, niveau_dummy)
 
         onze.append(PositionOnze(poste=poste_slot, joueur=choisi))
         deja_choisis.add(choisi.id)
     return onze
 
 
-def _meilleure_formation_disponible(disponibles: list[Joueur], cfg: Config) -> str:
+def _niveau_dummy(effectif_reference: list[Joueur], cfg: Config) -> float:
+    if not effectif_reference:
+        return cfg.attributs.bornes.min
+    niveau_moyen = sum(note_globale(joueur, cfg.attributs) for joueur in effectif_reference) / len(effectif_reference)
+    return max(niveau_moyen * (1 - cfg.ia.selection.reduction_niveau_dummy), cfg.attributs.bornes.min)
+
+
+def _joueur_dummy(poste: Poste, niveau: float) -> Joueur:
+    """Joueur de secours transitoire — jamais écrit dans `Monde.joueurs`,
+    n'existe que le temps de composer ce onze (2026-09-11, demande
+    explicite de l'utilisateur après un crash réel en production :
+    un effectif appauvri par les renouvellements/agents libres/
+    démarchages peut tomber sous `joueurs_sur_terrain`, et
+    `_selectionner_onze` n'a alors littéralement personne à aligner).
+    Nommé "Dummy" pour rester identifiable si jamais il apparaissait
+    quelque part côté UI. Niveau = niveau moyen de l'effectif de
+    référence moins `reduction_niveau_dummy` (config), réparti
+    uniformément sur les attributs plutôt que via
+    `generer_attributs_depuis_niveau` (qui demande un `Random` que cette
+    fonction ne reçoit pas — inutile de fiabiliser la variance d'un
+    joueur qui n'existera que le temps d'un match).
+    """
+    niveau_arrondi = round(niveau)
+    attributs = Attributs(**{nom: niveau_arrondi for nom in NOMS_ATTRIBUTS})
+    return Joueur(
+        id=next(_COMPTEUR_DUMMY), nom="Dummy", prenom="", nationalite="?", date_naissance=Date(2000, 1, 1),
+        poste=poste, attributs=attributs, potentiel=niveau_arrondi, forme=1.0, fatigue=1.0, moral=1.0, fragilite=1.0,
+    )
+
+
+def _meilleure_formation_disponible(disponibles: list[Joueur], cfg: Config, effectif_reference: list[Joueur]) -> str:
     meilleur_score, meilleure_formation = -1.0, next(iter(cfg.formations.formations))
     for nom_formation in cfg.formations.formations:
-        onze = _selectionner_onze(disponibles, nom_formation, cfg.ia.selection, cfg)
+        onze = _selectionner_onze(disponibles, nom_formation, cfg.ia.selection, cfg, effectif_reference)
         score = sum(note_globale(position.joueur, cfg.attributs) for position in onze)
         if score > meilleur_score:
             meilleur_score, meilleure_formation = score, nom_formation

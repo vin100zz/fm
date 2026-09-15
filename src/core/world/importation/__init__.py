@@ -8,6 +8,7 @@ données") for the pipeline this module orchestrates.
 from pathlib import Path
 from random import Random
 
+from core.ai.budgets import effectifs_par_club, masse_salariale_max_reelle
 from core.config.modeles.racine import Config
 from core.domain.date import Date
 from core.domain.historique import Historique
@@ -53,6 +54,17 @@ def importer_monde(
     avertissements += limitation.limiter_effectifs_actifs(
         joueurs, clubs, cfg.attributs, cfg.ia.garde_fous.effectif_max
     )
+
+    # Le plafond salarial calcule dans construction.construire_club (a
+    # partir de la seule reputation, avant que le moindre joueur existe)
+    # sert desormais de plancher : on le remplace par la masse salariale
+    # reellement importee (+ marge) des lors qu'elle est plus genereuse
+    # — voir core.ai.budgets.masse_salariale_max_reelle.
+    _, masses_salariales = effectifs_par_club(joueurs.values())
+    for club in clubs.values():
+        club.masse_salariale_max = masse_salariale_max_reelle(
+            masses_salariales.get(club.id, 0), club.masse_salariale_max, cfg
+        )
 
     prochain_id = 1 + max(
         max(joueurs, default=0), max(clubs, default=0), max(competitions, default=0)

@@ -48,10 +48,13 @@
     }
   },
   "budgets": {
+    "_note": "marge_masse_salariale_initiale (2026-09-12, ajoute, demande explicite de l'utilisateur) : masse_salariale_max derivait uniquement de la reputation, sans jamais verifier la masse salariale reellement importee — mesure : Real Madrid importe 5,3M par semaine de salaires reels, contre un plafond derive de la reputation a 1,03M, x5,2. Desormais recalcule apres import comme la masse salariale reelle du club fois (1 + cette marge), avec l'ancien plafond derive de la reputation garde comme plancher pour les clubs dont les donnees de contrat sont absentes ou clairsemees (core.world.importation, apres construction des joueurs). 10% : marge de manoeuvre minimale pour un renouvellement/une premiere signature sans autoriser une derive incontrolee. marge_revenu_mensuel (2026-09-12, ajoute, meme jour, demande explicite de l'utilisateur : 'ne peut-on pas juste reduire les revenus ?') : le revenu mensuel (core.world.finances) est la masse salariale reellement payee fois (1 + cette marge), pas fois 1/part_revenus_salaires (~1.61, soit 61% de marge) — ce dernier faisait accumuler plusieurs centaines de millions d'euros de budget transfert inutilise sur 4 saisons simulees pour les grands clubs, le mercato plafonnant le nombre de negociations par fenetre plutot que la depense totale. 0.15 : marge delibrement plus faible, dediee a ce flux recurrent plutot que reutilisee de part_revenus_salaires (qui reste la formule du plafond salarial a l'import, un usage distinct).",
     "part_revenus_transfert": 0.30,
     "part_solde_transfert": 0.40,
     "part_revenus_salaires": 0.62,
     "semaines_par_an": 52,
+    "marge_masse_salariale_initiale": 0.10,
+    "marge_revenu_mensuel": 0.15,
     "revenus": {
       "base_par_point_reputation": 850000,
       "bonus_classement_premier": 45000000,
@@ -60,8 +63,11 @@
     }
   },
   "mercato": {
-    "_note": "facteur_offre_initiale, tours_negociation_max et tentatives_prospection_max ne sont pas dans docs/ia-gestion.md. facteur_offre_initiale=1.15 est calibre contre repondre_offre() : le seuil vendeur minimal possible est seuil_vendeur_multiplicateur - seuil_vendeur_reduction_surplus = 1.10 (surplus maximal), donc toute offre sous 0.75*1.10=0.825x valeur() est TOUJOURS refusee net (verifie par mesure : 0.85 -> 100% refus). 1.15 se situe dans la zone qui obtient une contre-offre (pas un refus sec) dans la majorite des cas sans deja payer plein tarif. tours_negociation_max est un filet de securite si une contre-offre devient inabordable entre-temps (repondre_offre() converge sinon naturellement en 2 tours : offre -> contre-offre -> ré-offre exactement au montant contré -> accepté). tentatives_prospection_max borne le nombre de besoins examines par tour et par club avant d'abandonner (au-dela de negociations_actives_max) — sans ca, un club dont l'effectif est deja sature (ex. un grand club dont tous les joueurs frolent le plafond d'attribut) reevalue en vain chacun de ses besoins a chaque tour, ce qui a coute ~12s/tour sur les 96 clubs actifs avant ce garde-fou.",
+    "_note": "facteur_offre_initiale, tours_negociation_max et tentatives_prospection_max ne sont pas dans docs/ia-gestion.md. facteur_offre_initiale=1.15 est calibre contre repondre_offre() : le seuil vendeur minimal possible est seuil_vendeur_multiplicateur - seuil_vendeur_reduction_surplus = 1.10 (surplus maximal), donc toute offre sous 0.75*1.10=0.825x valeur() est TOUJOURS refusee net (verifie par mesure : 0.85 -> 100% refus). 1.15 se situe dans la zone qui obtient une contre-offre (pas un refus sec) dans la majorite des cas sans deja payer plein tarif. tours_negociation_max est un filet de securite si une contre-offre devient inabordable entre-temps (repondre_offre() converge sinon naturellement en 2 tours : offre -> contre-offre -> ré-offre exactement au montant contré -> accepté). tentatives_prospection_max borne le nombre de besoins examines par tour et par club avant d'abandonner (au-dela de negociations_actives_max) — sans ca, un club dont l'effectif est deja sature (ex. un grand club dont tous les joueurs frolent le plafond d'attribut) reevalue en vain chacun de ses besoins a chaque tour, ce qui a coute ~12s/tour sur les 96 clubs actifs avant ce garde-fou. effectif_minimum_urgence/negociations_actives_max_urgence/tentatives_prospection_max_urgence (2026-09-11, ajoutes) : garde-fou documente dans docs/ia-gestion.md §7 ('taille d'effectif 18-30, force l'achat sous 18') mais jamais implemente — repere en production, un crash reel (effectif sous le nombre de joueurs sur le terrain, IndexError dans core/ai/selection.py) sur un club a 12 joueurs, et 13 des 96 clubs actifs deja sous 16 joueurs apres seulement 1,6 saison simulee. En dessous d'effectif_minimum_urgence, un club plafonne desormais a negociations_actives_max_urgence negociations simultanees et tentatives_prospection_max_urgence besoins examines par tour au lieu des valeurs normales (3/4) — un club exsangue a souvent plusieurs postes vides a la fois, la limite normale n'en traite qu'une poignee par tour.",
     "negociations_actives_max": 3,
+    "effectif_minimum_urgence": 16,
+    "negociations_actives_max_urgence": 8,
+    "tentatives_prospection_max_urgence": 12,
     "taille_shortlist": 6,
     "tentatives_prospection_max": 4,
     "facteur_offre_initiale": 1.15,
@@ -78,10 +84,11 @@
       "bruit_ecart_type": 0.05
     },
     "clubs_dormants": {
-      "_note": "Les ~25900 clubs non simules forment le marche exterieur. probabilite_demarchage_par_tour (2026-09-11, renommee et cablee — etait probabilite_demarchage_par_fenetre, definie depuis la construction initiale de la boucle de mercato mais jamais utilisee) : tiree une fois par TOUR et par besoin SURPLUS, pas une fois par fenetre malgre l'ancien nom — 're-tirer a chaque tour' est ce qui rend un club qui reste longtemps avec un surplus de plus en plus susceptible d'etre demarche, plutot qu'une seule chance binaire au debut de la fenetre. Calibree par mesure directe (simulation d'une saison sur les vraies donnees) pour viser un volume de sortie qui, combine aux achats, atteigne la fourchette 2-7 mouvements/club/saison observee en football reel — voir docs/ia-gestion.md, section mercato.",
+      "_note": "Les ~25900 clubs non simules forment le marche exterieur. probabilite_demarchage_par_tour (2026-09-11, renommee et cablee — etait probabilite_demarchage_par_fenetre, definie depuis la construction initiale de la boucle de mercato mais jamais utilisee) : tiree une fois par TOUR et par besoin SURPLUS, pas une fois par fenetre malgre l'ancien nom — 're-tirer a chaque tour' est ce qui rend un club qui reste longtemps avec un surplus de plus en plus susceptible d'etre demarche, plutot qu'une seule chance binaire au debut de la fenetre. Calibree par mesure directe (simulation d'une saison sur les vraies donnees) pour viser un volume de sortie qui, combine aux achats, atteigne la fourchette 2-7 mouvements/club/saison observee en football reel — voir docs/ia-gestion.md, section mercato. part_budget_max_demarchage (2026-09-11, ajoutee) : le seul garde-fou anterieur (budget_transfert du club dormant >= montant) laissait un club depenser jusqu'a 100% de son budget sur une seule demarche — repere en production (AS Cannes, 96% de son budget sur un seul joueur de RC Lens). Borne desormais le montant a cette part du budget_transfert du club dormant choisi, pas seulement a sa totalite.",
       "probabilite_acceptation_offre_au_prix": 0.80,
       "multiplicateur_prix_demande": 1.15,
       "probabilite_demarchage_par_tour": 0.002,
+      "part_budget_max_demarchage": 0.30,
       "part_cible_transferts_entrants": 0.32
     }
   },
@@ -121,13 +128,14 @@
     "correlation_reputation_agressivite": 0.35
   },
   "selection": {
-    "_note": "score par poste = note_globale^poids_composite * forme^poids_forme * fatigue^poids_fatigue * malus_hors_poste. poids a 1.0 = formule multiplicative simple ; un poids a 0 neutralise ce facteur.",
+    "_note": "score par poste = note_globale^poids_composite * forme^poids_forme * fatigue^poids_fatigue * malus_hors_poste. poids a 1.0 = formule multiplicative simple ; un poids a 0 neutralise ce facteur. reduction_niveau_dummy (2026-09-11, ajoutee, demande explicite de l'utilisateur apres un crash reel en production) : quand un effectif appauvri ne fournit plus assez de joueurs disponibles pour completer un onze, core/ai/selection.py::_joueur_dummy cree un joueur de secours transitoire (jamais persiste) au niveau moyen de l'effectif de reference moins cette part.",
     "poids_composite": 1.0,
     "poids_forme": 1.0,
     "poids_fatigue": 1.0,
     "seuil_rotation_fatigue": 0.65,
     "ecart_niveau_acceptable_rotation": 6.0,
     "poids_ecart_reputation_bloc": 0.01,
-    "bonus_bloc_domicile": 0.10
+    "bonus_bloc_domicile": 0.10,
+    "reduction_niveau_dummy": 0.20
   }
 }

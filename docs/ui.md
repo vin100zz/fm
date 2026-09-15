@@ -201,7 +201,8 @@ Barre persistante en tête d'application :
 - Date courante, saison, prochaine échéance
 - Boutons : avancer d'un jour, avancer à la prochaine journée de championnat,
   avancer à la fin de la fenêtre de mercato
-- Journal des événements du jour : résultats, transferts, blessures
+- Journal des événements du jour : résultats, transferts, blessures,
+  renouvellements de contrat et départs en agent libre (2026-09-11, ajoutés)
 
 **Avance automatique (2026-09-11, ajouté)** : bouton "▶ Auto" en bascule
 play/pause — un clic enchaîne "avancer à la prochaine journée" en boucle
@@ -230,8 +231,8 @@ l'avance automatique.
 |---|---|
 | Effectif | liste triable : poste, nom, âge, note, salaire, fin de contrat, état (blessé, suspendu, fatigue) |
 | Calendrier | matches passés et à venir, résultat, adversaire, domicile/extérieur |
-| Budget | budget de transfert, masse salariale et plafond, solde, revenus |
-| Transferts | arrivées et départs de la saison, avec montants |
+| Transferts | arrivées et départs payants, avec montants ; **et** (2026-09-12, ajouté) départs libres en fin de contrat, retraites, promotions du centre de formation |
+| Budget | (2026-09-12, implémenté) budget de transfert, masse salariale et plafond, solde ; historique financier — tous les revenus (mensuels, primes de classement) et toutes les dépenses (salaires, achats de transfert), avec les ventes en revenu |
 | Historique | classements passés, palmarès, transferts marquants |
 
 En-tête : nom, pays, compétition, réputation, classement actuel, forme sur les
@@ -264,7 +265,7 @@ direct de `Club`, pas d'agrégation nécessaire.
 | Caractéristiques | les 13 attributs, groupés par famille, avec barres |
 | Potentiel | **fourchette d'estimation**, jamais la valeur réelle |
 | État | blessure en cours et durée, fatigue, suspension, forme, moral |
-| Contrat | club, salaire hebdomadaire, date de fin, valeur de marché estimée |
+| Contrat | club, salaire hebdomadaire, date de fin, valeur de marché estimée — "Libre" et champs vides si agent libre |
 | Saison en cours | matches, minutes, buts, passes, note moyenne, cartons — **non implémenté**, voir "Historique" |
 | Historique | une ligne par saison **et par club** ; matches, buts, note moyenne, montant du transfert d'arrivée le cas échéant |
 
@@ -314,6 +315,17 @@ par défaut), pagination serveur, filtre par saison. `GET
 /api/monde/transferts` accepte aussi `club=` (non exposé dans ce filtre
 de menu — déjà couvert par `GET /api/clubs/{id}/transferts`).
 
+**Onglet "Transferts" d'une fiche club étendu (2026-09-12, ajouté,
+demande explicite de l'utilisateur)** : trois sections supplémentaires,
+sous les transferts payants — départs libres en fin de contrat,
+retraites, promotions du centre de formation — chacune backée par `GET
+/api/clubs/{id}/mouvements-effectif?type=` (`Monde.historique.
+mouvements_effectif`, voir "État de l'implémentation" dans
+`docs/progression-demographie.md` pour le câblage retraite/promotion
+lui-même). Colonnes : date, joueur (lien vers la fiche — sauf une
+retraite, dont le joueur a quitté `Monde.joueurs` : le nom reste affiché,
+dénormalisé sur l'enregistrement, mais sans lien cliquable), saison.
+
 Un club dormant est consultable — nom, effectif, fiches joueurs — mais n'a ni
 classement, ni calendrier, ni statistiques de saison. L'interface doit le
 signaler explicitement plutôt que d'afficher des sections vides.
@@ -332,8 +344,9 @@ GET  /api/clubs?competition=&statut=actif|dormant&recherche=&page=&tri=
 GET  /api/clubs/{id}                      en-tête + résumé
 GET  /api/clubs/{id}/effectif
 GET  /api/clubs/{id}/calendrier
-GET  /api/clubs/{id}/finances             — non implémenté
 GET  /api/clubs/{id}/transferts?saison=
+GET  /api/clubs/{id}/mouvements-effectif?type=fin_contrat|retraite|promotion   (2026-09-12, ajouté)
+GET  /api/clubs/{id}/historique-financier                                     (2026-09-12, ajouté)
 GET  /api/clubs/{id}/historique           — non implémenté
 
 GET  /api/competitions

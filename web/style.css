@@ -198,6 +198,9 @@ tr:hover td { background: #f5f9ff; }
 
 .statut-dormant { color: var(--texte-attenue); font-style: italic; }
 
+.montant-positif { color: var(--victoire); }
+.montant-negatif { color: var(--alerte); }
+
 .evenement-ligne { padding: 4px 0; border-bottom: 1px solid #eee; font-size: 0.9rem; }
 
 @media (max-width: 900px) {

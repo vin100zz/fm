@@ -83,6 +83,7 @@ export async function renderDetail(conteneur, id) {
       <button data-onglet="effectif" class="actif">Effectif</button>
       <button data-onglet="calendrier">Calendrier</button>
       <button data-onglet="transferts">Transferts</button>
+      <button data-onglet="budget">Budget</button>
     </div>
     <div id="contenu-onglet"></div>
   `;
@@ -124,26 +125,94 @@ export async function renderDetail(conteneur, id) {
   }
 
   async function afficherTransferts() {
+    contenuOnglet.innerHTML = `
+      <h2>Transferts</h2>
+      <div id="transferts-payants"></div>
+      <h2>Départs libres (fin de contrat)</h2>
+      <div id="departs-libres"></div>
+      <h2>Retraites</h2>
+      <div id="retraites"></div>
+      <h2>Promotions du centre de formation</h2>
+      <div id="promotions"></div>
+    `;
+
     const transferts = await api.transfertsClub(id);
+    const conteneurTransferts = contenuOnglet.querySelector("#transferts-payants");
     if (!transferts.length) {
-      contenuOnglet.innerHTML = "<p>Aucun transfert cette saison.</p>";
+      conteneurTransferts.innerHTML = "<p>Aucun transfert cette saison.</p>";
+    } else {
+      const colonnes = [
+        { cle: "date", libelle: "Date" },
+        { cle: "sens", libelle: "Sens", format: (v) => (v === "arrivee" ? "↘ Arrivée" : "↗ Départ") },
+        { cle: "joueur_nom", libelle: "Joueur", format: (v, l) => `<a href="#/joueurs/${l.joueur_id}">${echappe(v)}</a>` },
+        {
+          cle: "club_source_nom", libelle: "De",
+          format: (v, l) => (l.club_source_id ? `<a href="#/clubs/${l.club_source_id}">${echappe(v)}</a>` : "—"),
+        },
+        {
+          cle: "club_cible_nom", libelle: "Vers",
+          format: (v, l) => (l.club_cible_id ? `<a href="#/clubs/${l.club_cible_id}">${echappe(v)}</a>` : "—"),
+        },
+        { cle: "montant", libelle: "Montant", format: (v) => `${v.toLocaleString("fr-FR")} €` },
+      ];
+      tableauTriable(conteneurTransferts, colonnes, transferts, { triInitial: "date", sensInitial: true });
+    }
+
+    await afficherMouvementsEffectif("fin_contrat", "#departs-libres", "Aucun départ libre.");
+    await afficherMouvementsEffectif("retraite", "#retraites", "Aucune retraite.");
+    await afficherMouvementsEffectif("promotion", "#promotions", "Aucune promotion du centre de formation.");
+  }
+
+  async function afficherMouvementsEffectif(type, selecteur, messageVide) {
+    const mouvements = await api.mouvementsEffectifClub(id, type);
+    const conteneurSection = contenuOnglet.querySelector(selecteur);
+    if (!conteneurSection) return;
+    if (!mouvements.length) {
+      conteneurSection.innerHTML = `<p>${messageVide}</p>`;
       return;
     }
     const colonnes = [
       { cle: "date", libelle: "Date" },
-      { cle: "sens", libelle: "Sens", format: (v) => (v === "arrivee" ? "↘ Arrivée" : "↗ Départ") },
-      { cle: "joueur_nom", libelle: "Joueur", format: (v, l) => `<a href="#/joueurs/${l.joueur_id}">${echappe(v)}</a>` },
       {
-        cle: "club_source_nom", libelle: "De",
-        format: (v, l) => (l.club_source_id ? `<a href="#/clubs/${l.club_source_id}">${echappe(v)}</a>` : "—"),
+        // Un joueur a la retraite a quitte Monde.joueurs (core/world/
+        // demographie/cycle_annuel.py) : pas de fiche a lier vers un id
+        // qui n'existe plus, contrairement a fin_contrat/promotion.
+        cle: "joueur_nom", libelle: "Joueur",
+        format: (v, l) => (l.type === "retraite" ? echappe(v) : `<a href="#/joueurs/${l.joueur_id}">${echappe(v)}</a>`),
       },
-      {
-        cle: "club_cible_nom", libelle: "Vers",
-        format: (v, l) => (l.club_cible_id ? `<a href="#/clubs/${l.club_cible_id}">${echappe(v)}</a>` : "—"),
-      },
-      { cle: "montant", libelle: "Montant", format: (v) => `${v.toLocaleString("fr-FR")} €` },
+      { cle: "saison", libelle: "Saison" },
     ];
-    tableauTriable(contenuOnglet, colonnes, transferts, { triInitial: "date", sensInitial: true });
+    tableauTriable(conteneurSection, colonnes, mouvements, { triInitial: "date", sensInitial: true });
+  }
+
+  async function afficherBudget() {
+    contenuOnglet.innerHTML = `
+      <div class="carte">
+        <strong>Budget transferts :</strong> ${club.budget_transfert.toLocaleString("fr-FR")} €<br />
+        <strong>Masse salariale :</strong> ${club.masse_salariale.toLocaleString("fr-FR")} €/sem.
+          (plafond ${club.masse_salariale_max.toLocaleString("fr-FR")} €/sem.)<br />
+        <strong>Solde :</strong> ${club.solde.toLocaleString("fr-FR")} €
+      </div>
+      <h2>Historique financier</h2>
+      <div id="historique-financier"></div>
+    `;
+
+    const historique = await api.historiqueFinancierClub(id);
+    const conteneurHistorique = contenuOnglet.querySelector("#historique-financier");
+    if (!historique.length) {
+      conteneurHistorique.innerHTML = "<p>Aucun mouvement financier enregistré.</p>";
+      return;
+    }
+    const colonnes = [
+      { cle: "date", libelle: "Date" },
+      { cle: "description", libelle: "Description" },
+      {
+        cle: "montant", libelle: "Montant",
+        format: (v) => `<span class="${v >= 0 ? "montant-positif" : "montant-negatif"}">${v.toLocaleString("fr-FR")} €</span>`,
+      },
+      { cle: "saison", libelle: "Saison" },
+    ];
+    tableauTriable(conteneurHistorique, colonnes, historique, { triInitial: "date", sensInitial: true });
   }
 
   conteneur.querySelectorAll(".onglets button").forEach((btn) => {
@@ -152,6 +221,7 @@ export async function renderDetail(conteneur, id) {
       btn.classList.add("actif");
       if (btn.dataset.onglet === "effectif") afficherEffectif();
       else if (btn.dataset.onglet === "calendrier") afficherCalendrier();
+      else if (btn.dataset.onglet === "budget") afficherBudget();
       else afficherTransferts();
     });
   });

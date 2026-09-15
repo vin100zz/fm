@@ -25,11 +25,17 @@ and `_demarcher_surplus`/`_resoudre_demarchages` (proactive selling)
 below, and `config/ia_gestion.json`'s `profil_cible`/`clubs_dormants`
 `_note`s for the numbers.
 
+**Free agents (2026-09-11, added)**: `core.world.contrats.liberer_contrats_expires`
+releases a player to free agency (`club_id = None`) when their contract
+lapses — see that module for the renewal side. `_pool_par_poste`
+includes them, and the buy-side loop below signs one directly on a hit
+(`candidat.club_id is None`): no transfer fee, no seller to negotiate
+with, routed through the same `offres_par_joueur`/`_resoudre_offres`
+machinery as a normal target so multiple interested clubs still get
+arbitrated by `score_offre` — just always "accepted" instead of running
+`repondre_offre` (nobody to refuse on the player's behalf).
+
 **Deliberately out of scope** (documented, not silently skipped):
-- Free agents and weekly contract renewals (docs §6, "Agents libres")
-  aren't part of this loop — `core.ai.contrats.decision_renouvellement`
-  exists but nothing calls it on a schedule yet, so a player's contract
-  never actually expires into free agency.
 - No loan/swap deals, no release clauses — see `RegleTransfert` in
   docs/architecture.md, `TransfertSec` (straight cash) is the only kind.
 - A dormant club never negotiates or shows up as a specific persistent
@@ -130,7 +136,17 @@ def tour_mercato(monde: Monde, cfg: Config, rng: Random) -> list[EvenementJour]:
             offre = Offre(joueur.id, club.id, negociation.montant_offert, negociation.salaire_propose)
             offres_par_joueur[joueur.id].append((negociation, offre))
 
-        places_libres = cfg_m.negociations_actives_max - len(negos_du_club)
+        # Urgence effectif (2026-09-11) : sous effectif_minimum_urgence, un
+        # club a souvent plusieurs postes vides a la fois — les plafonds
+        # normaux (3 negociations, 4 tentatives) ne laisseraient en
+        # traiter qu'une poignee par tour. Repere en production : un club
+        # tombe a 12 joueurs (< joueurs_sur_terrain) plantait le moteur de
+        # selection ; 13 des 96 clubs actifs deja sous 16 apres 1,6 saison.
+        en_urgence = len(effectif) < cfg_m.effectif_minimum_urgence
+        negociations_actives_max = cfg_m.negociations_actives_max_urgence if en_urgence else cfg_m.negociations_actives_max
+        tentatives_prospection_max = cfg_m.tentatives_prospection_max_urgence if en_urgence else cfg_m.tentatives_prospection_max
+
+        places_libres = negociations_actives_max - len(negos_du_club)
         if places_libres <= 0:
             continue
 
@@ -141,7 +157,7 @@ def tour_mercato(monde: Monde, cfg: Config, rng: Random) -> list[EvenementJour]:
         besoins_a_examiner = manques + evaluer_opportunites(club, effectif, cfg)
 
         for besoin in besoins_a_examiner:
-            if places_libres <= 0 or tentatives >= cfg_m.tentatives_prospection_max:
+            if places_libres <= 0 or tentatives >= tentatives_prospection_max:
                 break
             tentatives += 1
 
@@ -149,7 +165,9 @@ def tour_mercato(monde: Monde, cfg: Config, rng: Random) -> list[EvenementJour]:
             if candidat is None:
                 continue
 
-            montant = round(valeur(candidat, monde.date, cfg) * cfg_m.facteur_offre_initiale)
+            # Agent libre : aucun frais de transfert, aucun vendeur a
+            # convaincre — seul le plafond salarial s'applique encore.
+            montant = 0 if candidat.club_id is None else round(valeur(candidat, monde.date, cfg) * cfg_m.facteur_offre_initiale)
             salaire = salaire_attendu(candidat, monde.date, cfg)
             if not _peut_se_permettre(club, montant, salaire, effectif, cfg, montant_reserve, salaire_reserve):
                 cibles_visees.add(candidat.id)  # inabordable : ne pas le re-evaluer ce tour
@@ -192,6 +210,13 @@ def _demarcher_surplus(
     exactement comme pour les actifs (`construction.py`, dérivé de la
     réputation/capacité du stade) — un filtre dessus suffit, pas besoin
     d'inventer une notion de richesse séparée pour le marché extérieur.
+
+    **Plafonné à `part_budget_max_demarchage` de ce budget, pas sa
+    totalité (2026-09-11, corrigé à nouveau)** : pouvoir payer un
+    montant ne veut pas dire y engager tout son budget de transfert —
+    à nouveau repéré en production (AS Cannes, 96% de son budget sur un
+    seul joueur de RC Lens). `seuil_budget` relève d'autant le plancher
+    de budget exigé pour être un candidat plausible.
     """
     if not clubs_dormants_tries:
         return []
@@ -207,9 +232,14 @@ def _demarcher_surplus(
         if joueur is None or joueur.club_id != club.id:
             continue
         montant = round(valeur(joueur, monde.date, cfg) * cfg_d.multiplicateur_prix_demande)
-        candidats = clubs_dormants_tries[bisect_left(budgets, montant):]
+        # Un club dormant doit pouvoir payer ce montant sans y engager plus
+        # de part_budget_max_demarchage de son budget_transfert total — pas
+        # seulement l'avoir en totalite (repere en production : un club
+        # depensait jusqu'a 96% de son budget sur une seule demarche).
+        seuil_budget = montant / cfg_d.part_budget_max_demarchage
+        candidats = clubs_dormants_tries[bisect_left(budgets, seuil_budget):]
         if not candidats:
-            continue  # aucun club dormant ne peut se permettre ce joueur
+            continue  # aucun club dormant ne peut se permettre ce joueur sans y engager tout son budget
         club_dormant = rng.choice(candidats)
         salaire = salaire_attendu(joueur, monde.date, cfg)
         demarchages.append((joueur, club, club_dormant, Offre(joueur.id, club_dormant.id, montant, salaire)))
@@ -257,27 +287,31 @@ def _resoudre_offres(
     for joueur_id, propositions in offres_par_joueur.items():
         joueur = monde.joueurs[joueur_id]
         club_vendeur = monde.clubs.get(joueur.club_id) if joueur.club_id is not None else None
-        if club_vendeur is None:
-            continue
-        effectif_vendeur = _effectif(monde, club_vendeur.id)
 
         acceptees: list[tuple[Negociation, Offre, Club]] = []
-        for negociation, offre in propositions:
-            club_acheteur = monde.clubs[negociation.club_acheteur_id]
-            if club_vendeur.statut is StatutClub.ACTIF:
-                reponse = repondre_offre(offre, club_vendeur, joueur, effectif_vendeur, monde.date, cfg)
-            else:
-                reponse = repondre_offre_dormant(offre, joueur, monde.date, cfg, rng)
+        if club_vendeur is None:
+            # Agent libre : personne a convaincre, chaque offre recue ce
+            # tour est d'office une signature valable — seul score_offre,
+            # plus bas, depart(age)ra s'il y en a plusieurs.
+            acceptees = [(negociation, offre, monde.clubs[negociation.club_acheteur_id]) for negociation, offre in propositions]
+        else:
+            effectif_vendeur = _effectif(monde, club_vendeur.id)
+            for negociation, offre in propositions:
+                club_acheteur = monde.clubs[negociation.club_acheteur_id]
+                if club_vendeur.statut is StatutClub.ACTIF:
+                    reponse = repondre_offre(offre, club_vendeur, joueur, effectif_vendeur, monde.date, cfg)
+                else:
+                    reponse = repondre_offre_dormant(offre, joueur, monde.date, cfg, rng)
 
-            if reponse.type is TypeReponse.ACCEPTE:
-                acceptees.append((negociation, offre, club_acheteur))
-            elif reponse.type is TypeReponse.CONTRE_OFFRE and negociation.tours + 1 < cfg_m.tours_negociation_max:
-                effectif_acheteur = _effectif(monde, club_acheteur.id)
-                if _peut_se_permettre(club_acheteur, reponse.contre_montant, negociation.salaire_propose, effectif_acheteur, cfg):
-                    negociations_conservees.append(
-                        Negociation(club_acheteur.id, joueur_id, reponse.contre_montant, negociation.salaire_propose, negociation.tours + 1)
-                    )
-                # inabordable ou tours epuises : negociation abandonnee (rien reconduit)
+                if reponse.type is TypeReponse.ACCEPTE:
+                    acceptees.append((negociation, offre, club_acheteur))
+                elif reponse.type is TypeReponse.CONTRE_OFFRE and negociation.tours + 1 < cfg_m.tours_negociation_max:
+                    effectif_acheteur = _effectif(monde, club_acheteur.id)
+                    if _peut_se_permettre(club_acheteur, reponse.contre_montant, negociation.salaire_propose, effectif_acheteur, cfg):
+                        negociations_conservees.append(
+                            Negociation(club_acheteur.id, joueur_id, reponse.contre_montant, negociation.salaire_propose, negociation.tours + 1)
+                        )
+                    # inabordable ou tours epuises : negociation abandonnee (rien reconduit)
 
         if not acceptees:
             continue
@@ -296,12 +330,14 @@ def _pool_par_poste(monde: Monde, cfg: Config) -> dict[Poste, list[tuple[float, 
     """(note_globale, joueur) pairs, sorted by note ascending — built once
     per turn so `_meilleur_candidat` can `bisect` straight to a club's
     target level instead of sorting or scanning the whole poste pool for
-    every single need, of every one of the ~96 clubs.
+    every single need, of every one of the ~96 clubs. Includes free
+    agents (`club_id is None`, 2026-09-11) — excluded before that field
+    could only ever mean "not yet part of the simulated world", now it
+    also means "released to free agency", a legitimate signing target.
     """
     pool: dict[Poste, list[tuple[float, Joueur]]] = defaultdict(list)
     for joueur in monde.joueurs.values():
-        if joueur.club_id is not None:
-            pool[joueur.poste].append((note_globale(joueur, cfg.attributs), joueur))
+        pool[joueur.poste].append((note_globale(joueur, cfg.attributs), joueur))
     for candidats in pool.values():
         candidats.sort(key=lambda paire: paire[0])
     return pool
@@ -384,27 +420,59 @@ def _peut_se_permettre(
     return masse_salariale_actuelle(effectif) + salaire + salaire_reserve <= club.masse_salariale_max
 
 
-def _executer_transfert(monde: Monde, joueur: Joueur, club_vendeur: Club, club_acheteur: Club, offre: Offre, cfg: Config) -> EvenementJour:
+def _executer_transfert(
+    monde: Monde, joueur: Joueur, club_vendeur: Club | None, club_acheteur: Club, offre: Offre, cfg: Config
+) -> EvenementJour:
+    """`club_vendeur=None` signature un agent libre (core/world/mercato.py's
+    free-agent branch) : pas de club à créditer, `montant` vaut 0
+    (aucun frais), `TransfertHistorique.club_source_id` reste `None` —
+    ce champ est optionnel exactement pour ce cas.
+
+    **Le vendeur récupère `montant` dans son `budget_transfert`, pas
+    seulement dans `solde` (2026-09-11, corrigé)** : `budget_transfert`
+    n'est calculé qu'une fois, à l'import (`core/ai/budgets.py`,
+    jamais recalculé depuis), et n'était jusqu'ici que débité par les
+    achats — un puits à sens unique. `solde` encaissait bien le produit
+    des ventes, mais rien ne le reversait jamais dans le budget
+    dépensable, si bien que l'économie ne pouvait que s'assécher au fil
+    des saisons (mesuré : 42 des 96 clubs actifs sous 16 joueurs après
+    4 saisons, certains grands clubs sous 10). Plutôt que d'attendre un
+    recalcul annuel (approche §4 de docs/ia-gestion.md, jamais
+    implémentée), l'argent d'une vente est réinjecté immédiatement,
+    demande explicite de l'utilisateur.
+
+    **L'acheteur perd aussi `montant` de son `solde`, pas seulement de
+    son `budget_transfert` (2026-09-12, corrigé au passage)** : jusqu'ici
+    seul `budget_transfert` baissait à l'achat, si bien que `solde` ne
+    faisait que croître pour tout le monde (jamais un vrai miroir de
+    `budget_transfert`) — repéré en implémentant le flux mensuel
+    (`core/world/finances.py`), qui doit pouvoir se fier à `solde` comme
+    à `budget_transfert` indifféremment.
+    """
     montant = offre.montant
     club_acheteur.budget_transfert = max(club_acheteur.budget_transfert - montant, 0)
-    if club_vendeur.statut is StatutClub.ACTIF:
+    club_acheteur.solde -= montant
+    if club_vendeur is not None and club_vendeur.statut is StatutClub.ACTIF:
         club_vendeur.solde += montant
+        club_vendeur.budget_transfert += montant
 
     duree = duree_par_age(joueur.date_naissance.age_a(monde.date), cfg.ia.contrats)
+    dc = cfg.monde.dates_cles.liberation_contrats_expires
     joueur.club_id = club_acheteur.id
     joueur.contrat = Contrat(
         salaire_hebdo=offre.salaire_propose,
-        date_fin=Date(monde.date.annee + duree, monde.date.mois, monde.date.jour),
+        date_fin=Date(monde.date.annee + duree, dc.mois, dc.jour),
         date_signature=monde.date,
     )
 
     monde.historique.transferts.append(
         TransfertHistorique(
-            date=monde.date, joueur_id=joueur.id, club_source_id=club_vendeur.id, club_cible_id=club_acheteur.id,
-            montant=montant, saison=monde.saison,
+            date=monde.date, joueur_id=joueur.id, club_source_id=club_vendeur.id if club_vendeur else None,
+            club_cible_id=club_acheteur.id, montant=montant, saison=monde.saison,
         )
     )
-    description = f"{joueur.prenom} {joueur.nom} : {club_vendeur.nom} -> {club_acheteur.nom} ({montant} €)"
+    origine = club_vendeur.nom if club_vendeur else "agent libre"
+    description = f"{joueur.prenom} {joueur.nom} : {origine} -> {club_acheteur.nom} ({montant} €)"
     return EvenementJour(TypeEvenementJour.TRANSFERT, description, joueur_id=joueur.id)
 
 

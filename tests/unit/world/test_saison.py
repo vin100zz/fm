@@ -1,5 +1,6 @@
 from random import Random
 
+from core.ai.budgets import prime_classement
 from core.config import Config
 from core.domain.date import Date
 from core.domain.etat_joueur import Suspension
@@ -174,6 +175,27 @@ class TestFinDeSaison:
         premier_match = min(nouveaux_matches, key=lambda m: m.date)
         assert (premier_match.date.mois, premier_match.date.jour) == (cfg.monde.saison.debut_mois, cfg.monde.saison.debut_jour)
         assert {c.id for c in monde.clubs.values() if c.id in competition.club_ids} == set(competition.club_ids)
+
+    def test_verse_la_prime_de_classement_a_chaque_club_selon_sa_place(self, cfg: Config) -> None:
+        # _petit_monde() donne a chaque club la meme reputation/pays et le
+        # meme effectif (meme masse salariale) : le flux mensuel de juillet
+        # (core/world/finances.py), qui tombe le meme jour que la bascule
+        # de saison, est donc identique pour chacun, et seul l'ecart entre
+        # deux clubs isole la prime de classement (qui depend de la place).
+        monde, competition = _petit_monde()
+        initialiser_saison(monde, cfg, Random(1))
+        rng = Random(1)
+        _jouer_toute_la_saison(monde, cfg, rng, competition)
+        avant = {club_id: monde.clubs[club_id].budget_transfert for club_id in competition.club_ids}
+
+        _sauter_au_1er_juillet_suivant(monde, cfg, rng)
+
+        classement = monde.historique.palmares[0].classement_final
+        deltas = {ligne.club_id: monde.clubs[ligne.club_id].budget_transfert - avant[ligne.club_id] for ligne in classement}
+        for place in range(1, len(classement)):
+            club_mieux_classe, club_moins_bien_classe = classement[place - 1].club_id, classement[place].club_id
+            ecart_attendu = prime_classement(place, cfg) - prime_classement(place + 1, cfg)
+            assert deltas[club_mieux_classe] - deltas[club_moins_bien_classe] == ecart_attendu
 
     def test_reinitialise_le_cumul_de_cartons_jaunes(self, cfg: Config) -> None:
         monde, competition = _petit_monde()

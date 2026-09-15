@@ -15,6 +15,23 @@ export function echappe(texte) {
   return div.innerHTML;
 }
 
+// Date.__str__ cote serveur (core/domain/date.py) rend "JJ/MM/AAAA" —
+// pas comparable en l'etat (localeCompare trierait par jour d'abord).
+// Reconnu ici pour que toute colonne "date" (transferts, calendrier,
+// historique financier...) se trie vraiment chronologiquement.
+const RE_DATE_JJ_MM_AAAA = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+
+function cleTri(valeur) {
+  if (typeof valeur === "string") {
+    const correspondance = valeur.match(RE_DATE_JJ_MM_AAAA);
+    if (correspondance) {
+      const [, jour, mois, annee] = correspondance;
+      return `${annee}-${mois}-${jour}`;
+    }
+  }
+  return valeur;
+}
+
 // colonnes: [{cle, libelle, format?(valeur, ligne) -> string, triable?: bool}]
 // Sans `options.triInitial`, les lignes s'affichent dans l'ordre reçu
 // (déjà trié côté serveur pour les listes paginées) — cliquer un
@@ -27,8 +44,8 @@ export function tableauTriable(conteneur, colonnes, lignes, options = {}) {
   function rendre() {
     const triees = colonneTri
       ? [...lignesActuelles].sort((a, b) => {
-          const va = a[colonneTri];
-          const vb = b[colonneTri];
+          const va = cleTri(a[colonneTri]);
+          const vb = cleTri(b[colonneTri]);
           const cmp = typeof va === "string" ? va.localeCompare(vb) : va - vb;
           return sensDescendant ? -cmp : cmp;
         })

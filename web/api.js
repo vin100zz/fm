@@ -35,6 +35,8 @@ export const api = {
   effectifClub: (id) => requete(`/api/clubs/${id}/effectif`),
   calendrierClub: (id) => requete(`/api/clubs/${id}/calendrier`),
   transfertsClub: (id) => requete(`/api/clubs/${id}/transferts`),
+  mouvementsEffectifClub: (id, type) => requete(avecParametres(`/api/clubs/${id}/mouvements-effectif`, { type })),
+  historiqueFinancierClub: (id) => requete(`/api/clubs/${id}/historique-financier`),
 
   competitions: () => requete("/api/competitions"),
   classement: (id) => requete(`/api/competitions/${id}/classement`),

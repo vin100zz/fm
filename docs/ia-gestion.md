@@ -29,13 +29,42 @@ simultanée pour les 96 clubs actifs, avec les négociations en cours
 persistées sur `Monde.negociations` (nouveau type `Negociation`) d'un tour à
 l'autre. Voir "Boucle de mercato" plus bas pour le détail (convergence en
 2 tours, garde-fous de budget/masse salariale, calibration du volume —
-2.88 mouvements/club/saison mesuré, ce qui reste hors périmètre — agents
-libres, renouvellements).
+2.88 mouvements/club/saison mesuré).
 
-**Toujours hors périmètre** : l'orchestration hebdomadaire des
-renouvellements de contrat (§6) — la fonction `decision_renouvellement`
-existe et est testée, rien ne l'appelle encore selon un calendrier (contrairement
-à §5, désormais appelé depuis `avancer_un_jour`).
+**Renouvellements et agents libres (§6) implémentés (2026-09-11, ajouté,
+demande explicite de l'utilisateur)** — `core/world/contrats.py`,
+appelé depuis `avancer_un_jour` : `renouveler_contrats` (mensuel, voir
+"Contrats et renouvellements" plus bas pour pourquoi pas hebdomadaire
+comme documenté) décide, pour chaque club actif et chaque joueur sous
+contrat, s'il prolonge ; `decision_renouvellement` existait depuis
+l'étape 7, rien ne l'appelait sur un calendrier avant ce jour.
+`liberer_contrats_expires` (chaque 1er juillet) libère qui n'a pas été
+renouvelé. `core/world/mercato.py` signe désormais aussi les agents
+libres, sans négociation ni frais de transfert.
+
+**Économie récurrente (§4) implémentée (2026-09-12, ajoutée, demande
+explicite de l'utilisateur)** — `core/world/finances.py::appliquer_flux_mensuel`
+(salaires payés / billetterie encaissée, chaque 1er du mois) et
+`core/ai/budgets.py::prime_classement` (versée à la bascule de saison,
+contre le classement final réel). Avant cet ajout, un club actif ne
+gagnait de l'argent qu'au moment d'une vente ; les plus grands clubs
+(Real Madrid, Barcelone, Man City) restaient bloqués à 7-9 joueurs après
+4 saisons simulées faute de pouvoir jamais reconstituer un budget de
+transfert à la hauteur de leur propre niveau cible (mesuré :
+`budget_transfert` de Real Madrid à 3,7M€ quand ses propres besoins
+demandaient 22-49M€ par recrue) — voir "Budgets" plus bas pour le détail.
+
+**Chaque mouvement financier journalisé, pas seulement appliqué
+(2026-09-12, ajouté, même demande, onglet Budget d'une fiche club)** :
+`appliquer_flux_mensuel` et la prime de classement écrivent désormais
+chacun de leur côté un `MouvementFinancier` (`core/domain/historique.py`,
+nouveau) dans `Monde.historique.mouvements_financiers` — revenu et
+dépense enregistrés séparément, jamais juste le flux net, pour que
+l'historique financier liste "tous les revenus et toutes les dépenses"
+tel que demandé. Les transferts ne sont pas dupliqués dans cette liste
+(`Historique.transferts` reste leur seule source de vérité) ; `GET
+/api/clubs/{id}/historique-financier` fusionne les deux à la lecture —
+voir "Transferts" dans `docs/ui.md`.
 
 **Formules non données par ce document, tranchées pendant l'implémentation**
 (chacune documentée dans le docstring de sa fonction) :
@@ -155,17 +184,141 @@ Le club vend les surplus pour financer les manques.
 
 ## 4. Budgets
 
-Deux budgets séparés, et c'est le second qui fait tout le travail.
+Trois mécanismes distincts alimentent ou consomment le budget d'un club :
+un capital de départ calculé une fois, un flux récurrent mensuel, et une
+prime annuelle liée au classement. `budget_transfert` et `solde` évoluent
+toujours ensemble (voir plus bas pourquoi deux champs existent malgré ça).
+
+### Capital de départ (à l'import uniquement)
 
 ```python
 budget_transfert = revenus_saison * 0.30 + solde * 0.40 + ventes_realisees
-masse_salariale_max = revenus_saison * 0.62 / 52
+masse_salariale_max = revenus_saison * 0.62 / 52   # plancher, voir plus bas
 ```
 
-Revenus dérivés de la réputation, du classement de la saison précédente et du
-pays. **Le plafond salarial est appliqué strictement** : sans lui, l'IA explose
-en cinq saisons. Un club ne peut pas signer si le nouveau salaire fait dépasser
-le plafond — il doit vendre d'abord.
+Revenus dérivés de la réputation et du pays (`core/ai/budgets.py::calculer_revenus`,
+`classement_precedent=None` à l'import — aucune saison précédente à lire).
+Ce calcul n'est fait **qu'une fois**, dans
+`core/world/importation/construction.py`, et sert uniquement à amorcer
+`budget_transfert` (`masse_salariale_max` calculé ici n'est plus la
+valeur finale, voir "Plafond salarial ancré sur les vrais salaires"
+ci-dessous). **Le plafond salarial est appliqué strictement** : sans
+lui, l'IA explose en cinq saisons. Un club ne peut pas signer si le
+nouveau salaire fait dépasser le plafond — il doit vendre d'abord.
+
+### Plafond salarial ancré sur les vrais salaires importés
+
+**Corrigé 2026-09-12, demande explicite de l'utilisateur.** Le plafond
+ci-dessus, dérivé uniquement de la réputation, sous-évaluait
+drastiquement les très grands clubs : mesuré, Real Madrid importe
+5,3M€/semaine de salaires réels contre un plafond dérivé de la
+réputation à 1,03M€/semaine (x5,2). Comme `decision_renouvellement`
+(§6) bloque tout renouvellement dès que la masse salariale de l'effectif
+dépasse le plafond (`sous_plafond`, une porte ET, pas une des conditions
+du OU), ce décalage empêchait purement et simplement Real Madrid de
+renouveler qui que ce soit — les grands clubs s'effondraient à 6-9
+joueurs sur 4 saisons simulées, indépendamment de tout autre correctif
+(voir "Renouvellements" plus bas).
+
+`core/world/importation/__init__.py`, juste après la construction des
+joueurs (`core/ai/budgets.py::masse_salariale_max_reelle`), recalcule
+donc le plafond de chaque club à partir de sa masse salariale **réellement
+importée** :
+
+```python
+masse_salariale_max = max(masse_salariale_reelle_importee * 1.10, masse_salariale_max_derive_de_la_reputation)
+```
+
+Le plafond dérivé de la réputation (calculé plus haut, à l'import) sert
+de **plancher**, pas de valeur par défaut : un club dont les données de
+contrat sont absentes ou clairsemées (`masse_salariale_actuelle` alors
+nulle ou faible) garde un plafond raisonnable au lieu de se retrouver
+bloqué à ~0. `marge_masse_salariale_initiale` (0.10) est la seule marge
+de manœuvre au-delà des salaires déjà engagés. `masse_salariale_max`
+n'est ensuite jamais recalculé (fixé à l'import, comme avant).
+
+### Flux mensuel (`core/world/finances.py::appliquer_flux_mensuel`)
+
+**Ajouté 2026-09-12, demande explicite de l'utilisateur** ("il faudrait
+implémenter une notion de budget par équipe : dépenses = salaires chaque
+mois + transferts, revenus = transferts + revenu mensuel billetterie/
+merchandising + revenu annuel primes de classement"). Appelé chaque
+1er du mois depuis `avancer_un_jour`, pour chaque club actif :
+
+```python
+depense = masse_salariale_actuelle(effectif) * semaines_par_an / 12                       # salaires
+revenu = (masse_salariale_actuelle(effectif) * semaines_par_an / 12) / part_revenus_salaires  # billetterie/merchandising
+club.solde += revenu - depense
+club.budget_transfert += revenu - depense
+```
+
+**`revenu_mensuel` est ancré sur la masse salariale RÉELLEMENT payée
+(`masse_salariale_actuelle`), pas sur la réputation ni sur le plafond**
+— deux corrections successives le même jour :
+
+1. Une première version dérivait le revenu de
+   `calculer_revenus(reputation, pays)/12` : une fois le plafond salarial
+   corrigé pour suivre les vrais salaires (section précédente), un revenu
+   resté sur l'échelle de la réputation devenait comiquement trop petit
+   pour les mêmes grands clubs (mesuré : Real Madrid avec une masse
+   salariale réelle **sous** son propre plafond, mais un déficit mensuel
+   chronique d'environ -11M€, atteignant -318M€ sur 4 saisons simulées).
+2. La version suivante ancrait le revenu sur `masse_salariale_max` (le
+   plafond, donc les vrais salaires, mais un **plafond fixe**) : à
+   l'inverse, ça payait plein pot indépendamment de l'effectif réel — un
+   club à l'effectif stabilisé n'ayant plus besoin d'acheter accumulait
+   l'excédent sans jamais le dépenser (mercato plafonne le *nombre* de
+   négociations par fenêtre, pas la dépense totale). Mesuré : plus d'un
+   milliard d'euros de `budget_transfert` inutilisé pour Real Madrid après
+   4 saisons. **Corrigé** en ancrant sur `masse_salariale_actuelle`
+   (l'effectif réel) plutôt que sur le plafond : un effectif plus petit
+   gagne aussi moins, au lieu d'un plafond qui paie sans rapport avec le
+   vrai effectif.
+
+Dans les deux cas la formule inverse `part_revenus_salaires` (0.62, déjà
+la fraction du revenu que la masse salariale est censée représenter)
+pour garantir, par construction, qu'elle n'en dépasse jamais cette
+fraction — exactement l'intention d'origine, mais calée sur les vrais
+salaires réellement payés plutôt que sur la réputation ou un plafond fixe.
+
+**Conséquence : les salaires seuls ne peuvent plus mettre un club en
+dette.** `revenu` et `depense` dérivent tous deux de la même
+`masse_salariale_actuelle` avec une marge positive fixe (l'inverse de
+`part_revenus_salaires`) — le flux mensuel est donc toujours positif ou
+nul. Un déficit réel ne peut plus venir que d'un dépassement du budget
+transfert à l'achat, déjà bloqué en amont par `_peut_se_permettre`
+(`core/world/mercato.py`).
+
+### Prime de classement (`core/world/saison.py`, à la bascule du 1er juillet)
+
+**Ajoutée 2026-09-12, même demande.** `core/ai/budgets.py::prime_classement`
+(extrait de `calculer_revenus`, même formule `bonus_classement_premier *
+decroissance_par_place ** (place - 1)`) est versée une fois par an à
+chaque club actif, contre sa place réelle dans le classement final que
+`_relancer_saison_au_1er_juillet` vient de calculer et d'archiver — pas
+contre une estimation. C'est le "recalcul annuel" documenté plus bas
+(§ historique) comme non implémenté, désormais fait, mais sous forme
+d'une prime versée directement plutôt que d'un recalcul de
+`masse_salariale_max`/`budget_transfert` depuis zéro (`masse_salariale_max`
+n'a de toute façon aucune raison de changer : voir plus haut).
+
+### Historique : pourquoi `budget_transfert` et `solde` bougent ensemble
+
+**Repéré en production (2026-09-11)** après avoir rendu le mercato
+réellement actif cette session : sur 4 saisons simulées, 42 des 96 clubs
+actifs sous 16 joueurs, certains grands clubs sous 10.
+`calculer_budget_transfert`/`calculer_masse_salariale_max` n'étaient
+calculées qu'à l'import, jamais recalculées — `budget_transfert` n'était
+de ce fait débité par les achats que dans un seul sens : `solde`
+encaissait bien le produit des ventes mais ne le reversait jamais dans le
+budget dépensable. **Corrigé le jour même** (demande explicite) :
+`core/world/mercato.py::_executer_transfert` réinjecte le montant d'une
+vente dans le `budget_transfert` du vendeur, immédiatement, en plus de
+`solde`. **Complété 2026-09-12** en corrigeant l'asymétrie côté achat
+(`solde` de l'acheteur ne baissait pas, seul `budget_transfert` le
+faisait) — sans ça, `solde` n'aurait jamais pu servir de référence
+fiable pour le flux mensuel ci-dessus, qui doit pouvoir créditer/débiter
+les deux indifféremment.
 
 ## 5. Boucle de mercato
 
@@ -236,6 +389,13 @@ trois phases ci-dessous à la lettre, avec quelques écarts pratiques :
   `budget_transfert` couvre le montant (`_clubs_dormants_tries_par_budget`,
   trié une fois par tour, `bisect` par montant) ; sans club assez riche
   disponible, le démarchage n'a simplement pas lieu ce tour.
+  **Bug trouvé en production, deuxième fois le même jour** : pouvoir
+  payer ne veut pas dire y engager tout son budget — un club (AS Cannes)
+  a dépensé 96% de son `budget_transfert` total sur un seul joueur de
+  RC Lens. `part_budget_max_demarchage` (30%, config) relève le plancher
+  de budget exigé d'un candidat plausible d'autant, plutôt que de se
+  contenter de "peut payer en totalité". Vérifié sur une saison réelle :
+  57 démarchages, aucun au-delà de 29,8% du budget engagé.
 - **La négociation converge en au plus 2 tours** : `repondre_offre` est une
   fonction pure du montant offert, donc ré-offrir exactement le montant
   contré reproduit le même seuil et le franchit. `facteur_offre_initiale`
@@ -261,10 +421,22 @@ trois phases ci-dessous à la lettre, avec quelques écarts pratiques :
   l'acheteur et le crédite au `solde` du vendeur (si actif) — approximation
   du `ventes_realisees` de la formule de budget (§4), qui suppose un
   nouveau calcul de `revenus_saison` non modélisé ici.
+- **Urgence effectif (2026-09-11, ajoutée)** : sous `effectif_minimum_urgence`
+  (16, config), un club plafonne à `negociations_actives_max_urgence`/
+  `tentatives_prospection_max_urgence` (8/12) plutôt qu'aux valeurs
+  normales (3/4) — garde-fou documenté (§7, "taille d'effectif 18-30,
+  force l'achat sous 18") mais jamais implémenté avant qu'un vrai crash
+  en production ne le rende nécessaire : un club tombé à 12 joueurs a
+  fait planter `core/ai/selection.py` (effectif disponible sous
+  `joueurs_sur_terrain`), et 13 des 96 clubs actifs étaient déjà sous 16
+  joueurs après seulement 1,6 saison simulée. Un effectif exsangue a
+  souvent plusieurs postes vides à la fois ; les plafonds normaux n'en
+  auraient traité qu'une poignée par tour. Voir aussi §8, `_joueur_dummy` —
+  un filet de sécurité complémentaire pour le cas où, malgré tout, un
+  effectif tombe sous 11 joueurs disponibles un jour de match.
 - **Hors périmètre, documenté dans `core/world/mercato.py`** : pas
-  d'agents libres (§ suivant, aucun contrat n'expire jamais) ; pas de prêt, clause libératoire, ni
-  d'échange (`TransfertSec` — argent comptant seulement, voir
-  `RegleTransfert` dans `docs/architecture.md`).
+  de prêt, clause libératoire, ni d'échange (`TransfertSec` — argent
+  comptant seulement, voir `RegleTransfert` dans `docs/architecture.md`).
 
 Deux fenêtres : été (6 semaines) et hiver (3 semaines). La fenêtre tourne par
 **tours de jour**.
@@ -355,6 +527,77 @@ joueur nettement meilleur que ses concurrents s'attend à jouer.
 C'est ce cycle — et non un système d'entraînement — qui produit le renouvellement
 naturel des effectifs.
 
+**Implémenté (2026-09-11), simplifié à deux issues** (demande
+explicite de l'utilisateur) plutôt que trois : un club renouvelle, ou
+ne fait rien et le contrat va à son terme — pas de "mise sur liste de
+transfert" distincte. `core/world/contrats.py::renouveler_contrats`
+appelle `decision_renouvellement` pour chaque joueur sous contrat d'un
+club actif ; si `renouvelle`, le contrat est immédiatement remplacé
+(nouveau salaire, nouvelle échéance) — sinon rien ne change, le joueur
+continue de jouer sous son contrat actuel jusqu'à son terme naturel.
+
+- **Vérifié mensuellement, pas chaque semaine comme documenté plus
+  haut** : le chemin coûteux de `decision_renouvellement` (`utilite()`,
+  un `meilleure_affectation`) se déclenche pour tout joueur à moins de
+  `mois_avant_fin_declenchant` (12) de l'échéance — une bonne partie
+  d'un effectif à un instant donné. Re-décider un joueur non renouvelé
+  chaque jour pendant potentiellement un an referait cet appel coûteux
+  pour rien (la décision ne dépend que du joueur/club/date, jamais de
+  la dernière fois qu'elle a été posée) ; une fois par mois suffit et
+  coûte 30x moins cher.
+- **Tous les contrats générés (renouvellement ou transfert,
+  `core/world/mercato.py::_executer_transfert`) se terminent
+  désormais le 30 juin** (`config/monde.json ->
+  dates_cles.liberation_contrats_expires`), convention explicite de
+  l'utilisateur — pas nécessairement la vraie durée en années depuis la
+  signature (un renouvellement signé en mars pour "1 an" dure en
+  pratique ~15 mois jusqu'au 30 juin suivant), comme le fait le
+  football réel. Les contrats importés (dates réelles du CSV) ne sont
+  **pas** réécrits : `liberer_contrats_expires` compare `date_fin` à la
+  date du jour plutôt que d'exiger une correspondance exacte, donc une
+  échéance importée un peu décalée du 30 juin se libère quand même
+  correctement au 1er juillet suivant.
+- **`core/world/contrats.py::liberer_contrats_expires`**, chaque
+  1er juillet : tout joueur d'un club actif dont le contrat est déjà
+  échu (`date_fin <= date`) devient agent libre (`club_id = None`,
+  `contrat = None`). Un joueur renouvelé entre-temps a déjà une
+  échéance repoussée de plusieurs années — jamais concerné ici, aucun
+  état à suivre séparément.
+- **Bug trouvé en production, corrigé le jour même** : `decision_renouvellement`
+  ne renouvelait qu'à condition que `utilite() > 0` — or `utilite()`
+  passe par `meilleure_affectation` (gloutonne, même défaut que
+  `core/world/mercato.py::_meilleur_candidat` déjà corrigé plus haut) :
+  un effectif déjà saturé de très bons joueurs peut montrer un gain nul
+  ou négatif à en garder un de plus, même s'il mérite clairement sa
+  place. Repéré en simulant 4 saisons sur les vraies données : les plus
+  grands clubs (Real Madrid, Barcelone, Man City) s'effondraient
+  spécifiquement pour cette raison — leurs propres bons joueurs
+  n'étaient jamais renouvelés, expiraient en agents libres pour rien,
+  pendant que des clubs moyens s'en sortaient bien mieux. Un joueur qui
+  dépasse toujours `niveau_cible(club)` est désormais renouvelé même si
+  `utilite()` ressort à 0, en plus du critère existant.
+- **`budget_transfert` réalimenté à la vente, pas seulement `solde`** :
+  `calculer_budget_transfert`/`calculer_masse_salariale_max` (§4) ne
+  sont calculés qu'une fois, à l'import, jamais recalculés ensuite —
+  `budget_transfert` n'était donc débité par les achats que dans un seul
+  sens. `core/world/mercato.py::_executer_transfert` réinjecte
+  désormais le montant d'une vente directement dans le
+  `budget_transfert` du vendeur (pas seulement `solde`, qui
+  l'encaissait déjà sans jamais le reverser) — demande explicite de
+  l'utilisateur, plutôt que d'attendre un recalcul annuel complet.
+- **Signature d'un agent libre** : `core/world/mercato.py`'s boucle
+  d'achat cible aussi les agents libres (`_pool_par_poste` ne les
+  exclut plus). Pas de frais de transfert, pas de vendeur à convaincre
+  — la signature passe par le même circuit offres/résolution qu'un
+  transfert normal (plusieurs clubs intéressés le même tour sont
+  départagés par `score_offre`, comme d'habitude) mais est acceptée
+  d'office plutôt que soumise à `repondre_offre`.
+- **Minutes non suivies** (voir aussi `docs/ui.md`) :
+  `minutes_saison`/`minutes_attendues` valent 0/0 dans l'appel — la
+  formule de `satisfaction()` traite déjà ce cas comme neutre
+  (`s_jeu = 1.0` si `minutes_attendues` est nul), pas une valeur
+  inventée.
+
 ## 7. Garde-fous
 
 C'est ici que les simulations amateurs meurent, généralement vers la saison 10.
@@ -381,6 +624,21 @@ Avant chaque match, `AIController.choisir_composition` :
    remplaçant est à moins de 6 points de niveau, faire tourner
 5. Hauteur de bloc : dérivée de l'écart de réputation avec l'adversaire et du
    fait de jouer à domicile
+
+**Joueurs "Dummy" de secours (2026-09-11, ajouté, demande explicite de
+l'utilisateur après un crash réel en production)** : un effectif
+appauvri en cascade (renouvellements non accordés, agents libres,
+démarchages) peut tomber sous `joueurs_sur_terrain` (11) de joueurs
+disponibles — `core/ai/selection.py::_selectionner_onze` n'a alors
+littéralement personne à aligner pour un ou plusieurs postes, et
+plantait (`IndexError`) avant ce correctif. `_joueur_dummy` complète
+désormais le onze avec des joueurs de secours **transitoires** — jamais
+écrits dans `Monde.joueurs`, id négatif, nom "Dummy" pour rester
+identifiables — au niveau moyen de l'effectif de référence moins
+`reduction_niveau_dummy` (20%, config). Complémentaire, pas un
+remplacement, du vrai correctif de fond : voir "Boucle de mercato" plus
+haut, `effectif_minimum_urgence`, pour ce qui évite qu'un effectif en
+descende là en premier lieu.
 
 ## 9. Validation
 

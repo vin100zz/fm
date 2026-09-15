@@ -58,6 +58,8 @@ class BudgetsConfig:
     part_solde_transfert: float
     part_revenus_salaires: float
     semaines_par_an: int
+    marge_masse_salariale_initiale: float
+    marge_revenu_mensuel: float
     revenus: RevenusConfig
 
 
@@ -75,12 +77,16 @@ class ClubsDormantsConfig:
     probabilite_acceptation_offre_au_prix: float
     multiplicateur_prix_demande: float
     probabilite_demarchage_par_tour: float
+    part_budget_max_demarchage: float
     part_cible_transferts_entrants: float
 
 
 @dataclass(frozen=True, slots=True, config=STRICT)
 class MercatoIAConfig:
     negociations_actives_max: int
+    effectif_minimum_urgence: int
+    negociations_actives_max_urgence: int
+    tentatives_prospection_max_urgence: int
     taille_shortlist: int
     tentatives_prospection_max: int
     facteur_offre_initiale: float
@@ -146,6 +152,7 @@ class SelectionConfig:
     ecart_niveau_acceptable_rotation: float
     poids_ecart_reputation_bloc: float
     bonus_bloc_domicile: float
+    reduction_niveau_dummy: float
 
 
 @dataclass(frozen=True, slots=True, config=STRICT)

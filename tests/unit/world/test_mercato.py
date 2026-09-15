@@ -82,6 +82,71 @@ def _monde_avec_besoin_mc():
     return monde, cible_id
 
 
+def _monde_avec_agent_libre():
+    """Meme trou de poste que `_monde_avec_besoin_mc` (club 1 sans aucun
+    MC), mais le candidat est un agent libre (`club_id=None`,
+    `contrat=None`) plutot qu'un joueur d'un autre club — verifie le
+    circuit de signature directe (core/world/mercato.py : pas de vendeur
+    a convaincre, donc pas de negociation en plusieurs tours)."""
+    club = un_club(id=1, reputation=60, budget_transfert=500_000_000, masse_salariale_max=5_000_000)
+    joueurs = {}
+    for i, poste in enumerate(AUTRES_POSTES * 2):
+        j = un_joueur(id=1000 + i, poste=poste, club_id=1, attributs=_uniforme(70))
+        joueurs[j.id] = j
+
+    agent_libre_id = 2000
+    joueurs[agent_libre_id] = un_joueur(id=agent_libre_id, poste=Poste.MC, club_id=None, contrat=None, attributs=_uniforme(85))
+
+    monde = un_monde(date=Date(2026, 8, 10), clubs={1: club}, joueurs=joueurs)
+    return monde, agent_libre_id
+
+
+class TestUrgenceEffectif:
+    def test_augmente_les_plafonds_de_prospection_sous_le_seuil(self, cfg: Config) -> None:
+        """Repere en production : un club exsangue (12 joueurs, sous
+        joueurs_sur_terrain une fois blesses/suspendus retires) plantait
+        le moteur de selection, et 13/96 clubs actifs etaient deja sous
+        16 joueurs apres 1,6 saison — les plafonds normaux (3
+        negociations, 4 tentatives) ne laissaient traiter qu'une poignee
+        des nombreux postes vides d'un effectif aussi reduit."""
+        club = un_club(id=1, reputation=10, budget_transfert=500_000_000, masse_salariale_max=500_000_000)
+        postes_manquants = [Poste.GB, Poste.DC, Poste.DL, Poste.DR, Poste.MOC, Poste.AILG, Poste.AILD]
+        joueurs = {j.id: j for j in (un_joueur(id=1000 + i, poste=Poste.MC, club_id=1, attributs=_uniforme(70)) for i in range(5))}
+        for i, poste in enumerate(postes_manquants):
+            agent_id = 2000 + i
+            joueurs[agent_id] = un_joueur(id=agent_id, poste=poste, club_id=None, contrat=None, attributs=_uniforme(70))
+        monde = un_monde(date=Date(2026, 8, 10), clubs={1: club}, joueurs=joueurs)
+
+        tour_mercato(monde, cfg, Random(1))
+
+        assert len(monde.historique.transferts) > cfg.ia.mercato.tentatives_prospection_max
+        assert len(monde.historique.transferts) == len(postes_manquants)
+
+
+class TestSignatureAgentLibre:
+    def test_signe_un_agent_libre_en_un_seul_tour(self, cfg: Config) -> None:
+        monde, agent_libre_id = _monde_avec_agent_libre()
+
+        journal = tour_mercato(monde, cfg, Random(1))
+
+        assert monde.joueurs[agent_libre_id].club_id == 1
+        assert monde.joueurs[agent_libre_id].contrat is not None
+        assert any(e.type.value == "transfert" and e.joueur_id == agent_libre_id for e in journal)
+        assert len(monde.historique.transferts) == 1
+        transfert = monde.historique.transferts[0]
+        assert transfert.club_source_id is None
+        assert transfert.club_cible_id == 1
+        assert transfert.montant == 0
+
+    def test_agent_libre_toujours_inabordable_si_plafond_depasse(self, cfg: Config) -> None:
+        monde, agent_libre_id = _monde_avec_agent_libre()
+        monde.clubs[1].masse_salariale_max = 1  # aucune marge salariale, meme sans frais de transfert
+
+        tour_mercato(monde, cfg, Random(1))
+
+        assert monde.joueurs[agent_libre_id].club_id is None
+
+
 class TestFenetreMercato:
     def test_fenetre_mercato_ouverte_pendant_l_ete(self, cfg: Config) -> None:
         assert fenetre_mercato_ouverte(Date(2026, 7, 1), cfg) is True
@@ -144,14 +209,27 @@ class TestTourMercato:
         monde, cible_id = _monde_avec_besoin_mc()
         rng = Random(1)
         budget_avant = monde.clubs[1].budget_transfert
+        solde_acheteur_avant = monde.clubs[1].solde
         solde_avant = monde.clubs[2].solde
+        budget_vendeur_avant = monde.clubs[2].budget_transfert
 
         tour_mercato(monde, cfg, rng)
         tour_mercato(monde, cfg, rng)
 
         montant = monde.historique.transferts[0].montant
         assert monde.clubs[1].budget_transfert == budget_avant - montant
+        # L'acheteur perd aussi le montant de son solde, pas seulement de
+        # son budget_transfert (2026-09-12) : sans ca, solde ne faisait
+        # que croitre pour tout le monde et ne refletait jamais un vrai
+        # miroir de budget_transfert.
+        assert monde.clubs[1].solde == solde_acheteur_avant - montant
         assert monde.clubs[2].solde == solde_avant + montant
+        # Le vendeur recupere aussi le montant dans son budget_transfert,
+        # pas seulement dans solde (2026-09-11) : sans ca, budget_transfert
+        # n'est jamais realimente une fois passe l'import (calcule une
+        # seule fois), et l'economie s'assechait au fil des saisons
+        # (mesure : 42/96 clubs actifs sous 16 joueurs apres 4 saisons).
+        assert monde.clubs[2].budget_transfert == budget_vendeur_avant + montant
 
     def test_budget_insuffisant_empeche_la_negociation(self, cfg: Config) -> None:
         monde, cible_id = _monde_avec_besoin_mc()
@@ -195,6 +273,28 @@ class TestDemarchageSurplus:
         tour_mercato(monde, cfg, _RngDemarcheForce())
 
         assert monde.joueurs[surplus_id].club_id == 1
+        assert monde.historique.transferts == []
+
+    def test_ignore_un_club_dormant_qui_y_engagerait_trop_de_son_budget(self, cfg: Config) -> None:
+        """Bug rapporte en production : AS Cannes (budget_transfert
+        14,79M) a depense 14,18M sur un seul joueur de RC Lens — 96% de
+        son budget total. Pouvoir payer ne suffit pas, il ne faut pas y
+        engager plus de part_budget_max_demarchage du budget."""
+        club = un_club(id=1, reputation=10)
+        profondeur = profondeur_utile(Poste.BU, cfg)
+        effectif = [un_joueur(id=100 + i, poste=Poste.BU, club_id=1, attributs=_uniforme(60)) for i in range(profondeur + 1)]
+        surplus = effectif[-1]
+        montant_plein = round(
+            valeur(surplus, Date(2026, 8, 10), cfg) * cfg.ia.mercato.clubs_dormants.multiplicateur_prix_demande
+        )
+        # peut payer deux fois le montant, mais ça representerait plus de
+        # 30% de son budget (part_budget_max_demarchage) : toujours refuse.
+        club_dormant = un_club(id=99, statut=StatutClub.DORMANT, budget_transfert=montant_plein * 2)
+        monde = un_monde(date=Date(2026, 8, 10), clubs={1: club, 99: club_dormant}, joueurs={j.id: j for j in effectif})
+
+        tour_mercato(monde, cfg, _RngDemarcheForce())
+
+        assert monde.joueurs[surplus.id].club_id == 1
         assert monde.historique.transferts == []
 
     def test_ne_demarche_pas_si_le_tirage_echoue(self, cfg: Config) -> None:

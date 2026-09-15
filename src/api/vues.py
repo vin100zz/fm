@@ -10,7 +10,7 @@ from core.config.modeles.racine import Config
 from core.domain.classement import LigneClassement
 from core.domain.club import Club, StatutClub
 from core.domain.date import Date
-from core.domain.historique import LigneHistoriqueJoueur, TransfertHistorique
+from core.domain.historique import LigneHistoriqueJoueur, MouvementEffectif, MouvementFinancier, TransfertHistorique
 from core.domain.joueur import Joueur
 from core.domain.match import Match
 from core.domain.monde import Monde
@@ -142,6 +142,29 @@ class VueTransfert(BaseModel):
     saison: int
 
 
+class VueMouvementEffectif(BaseModel):
+    """Depart libre en fin de contrat, retraite, ou promotion du centre
+    de formation — sections de l'onglet "Transferts" d'une fiche club
+    distinctes des arrivees/departs payants (VueTransfert)."""
+
+    type: str  # "fin_contrat" | "retraite" | "promotion"
+    date: str
+    joueur_id: int
+    joueur_nom: str
+    saison: int
+
+
+class VueMouvementFinancier(BaseModel):
+    """Une ligne de l'historique financier (onglet "Budget") — revenu ou
+    depense, montant signe (positif = revenu, negatif = depense)."""
+
+    type: str  # "revenu_mensuel" | "salaires" | "prime_classement" | "achat_transfert" | "vente_transfert"
+    date: str
+    description: str
+    montant: int
+    saison: int
+
+
 class VueHistoriqueSaisonJoueur(BaseModel):
     saison: int
     club_id: int | None
@@ -260,6 +283,48 @@ def vue_transfert(transfert: TransfertHistorique, monde: Monde) -> VueTransfert:
         joueur_nom=f"{joueur.prenom} {joueur.nom}".strip() if joueur else "?",
         club_source_id=transfert.club_source_id, club_source_nom=club_source.nom if club_source else None,
         club_cible_id=transfert.club_cible_id, club_cible_nom=club_cible.nom if club_cible else None,
+        montant=transfert.montant, saison=transfert.saison,
+    )
+
+
+def vue_mouvement_effectif(mouvement: MouvementEffectif) -> VueMouvementEffectif:
+    return VueMouvementEffectif(
+        type=mouvement.type.value, date=str(mouvement.date), joueur_id=mouvement.joueur_id,
+        joueur_nom=f"{mouvement.prenom} {mouvement.nom}".strip(), saison=mouvement.saison,
+    )
+
+
+_LIBELLES_MOUVEMENT_FINANCIER = {
+    "revenu_mensuel": "Revenu mensuel (billetterie/merchandising)",
+    "salaires": "Salaires",
+    "prime_classement": "Prime de classement",
+}
+
+
+def vue_mouvement_financier(mouvement: MouvementFinancier) -> VueMouvementFinancier:
+    return VueMouvementFinancier(
+        type=mouvement.type.value, date=str(mouvement.date),
+        description=_LIBELLES_MOUVEMENT_FINANCIER[mouvement.type.value],
+        montant=mouvement.montant, saison=mouvement.saison,
+    )
+
+
+def vue_mouvement_financier_transfert(transfert: TransfertHistorique, monde: Monde, club_id: int) -> VueMouvementFinancier:
+    """Un transfert n'est pas dupliqué en `MouvementFinancier` — c'est
+    déjà `Historique.transferts`, la source de vérité — mais l'onglet
+    Budget a besoin de le voir sur la même ligne de temps que le reste
+    de l'historique financier. Le sens (achat/vente) dépend du club
+    consulté : un même transfert compte négatif pour l'acheteur, positif
+    pour le vendeur."""
+    joueur = monde.joueurs.get(transfert.joueur_id)
+    nom = f"{joueur.prenom} {joueur.nom}".strip() if joueur else "?"
+    if transfert.club_cible_id == club_id:
+        return VueMouvementFinancier(
+            type="achat_transfert", date=str(transfert.date), description=f"Achat de {nom}",
+            montant=-transfert.montant, saison=transfert.saison,
+        )
+    return VueMouvementFinancier(
+        type="vente_transfert", date=str(transfert.date), description=f"Vente de {nom}",
         montant=transfert.montant, saison=transfert.saison,
     )
 

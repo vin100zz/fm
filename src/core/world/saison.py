@@ -25,26 +25,50 @@ or relegation**: the same `competition.club_ids` carry over forever —
 see `Competition.appliquer_fin_saison` in docs/architecture.md, still
 not built, and `docs/ui.md`.
 
-Deliberately not here (documented, not silently skipped): weekly
-contract renewals and free agency (`core.ai.contrats.decision_renouvellement`
-exists, nothing calls it — see `core/world/mercato.py`'s own docstring),
-monthly progression (`core.world.progression.progresser` needs real
-per-player minutes played this month, which nothing records yet — only
-match *ratings* are tracked, not minutes), centre de formation
-promotion and the démographie bilan (both dated in `config/monde.json
--> dates_cles`, but nothing triggers on a date here yet). Live in-match
-substitutions aren't wired either: `AIController.choisir_composition`
+**Contract renewal and free agency (2026-09-11, added, explicit user
+instruction)**: `core.world.contrats.renouveler_contrats` (monthly —
+see its own docstring for why not literally weekly, a performance
+choice) decides, per active club per contracted player, whether to
+extend — `core.ai.contrats.decision_renouvellement` existed since step
+7 but nothing called it until now. `liberer_contrats_expires` releases
+anyone whose contract lapsed (checked every 1st July, alongside the
+season rollover it's adjacent to) to free agency (`club_id = None`,
+`contrat = None`); `core/world/mercato.py`'s buy-side loop now also
+targets free agents, signed directly (no fee, no seller to negotiate
+with) rather than through a transfer negotiation.
+
+**Recurring finances and squad life-cycle (2026-09-12, added, explicit
+user instruction)**: `core.world.finances.appliquer_flux_mensuel` (wages
+paid / billetterie earned, every 1st of the month) and
+`core.ai.budgets.prime_classement` (paid here, against the season's real
+final classement, right after it's archived) replace the once-at-import
+budget estimate with a real recurring economy — see "Budgets" in
+docs/ia-gestion.md. `core.world.demographie.cycle_annuel.appliquer_cycle_annuel_effectif`
+(retirement + centre de formation promotion, both pure since step 8,
+neither ever called until now) runs once a year at `config/monde.json
+-> dates_cles.promotion_centre_formation` (15 juin) — deliberately
+narrower than the full démographie feedback loop (`cohorte.py`), see
+its own module docstring.
+
+Deliberately not here (documented, not silently skipped): monthly
+progression (`core.world.progression.progresser` needs real per-player
+minutes played this month, which nothing records yet — only match
+*ratings* are tracked, not minutes) and the broader démographie bilan
+(`core/world/demographie/cohorte.py`'s population-wide rebalancing, as
+opposed to the narrower per-club retirement/promotion cycle above). Live
+in-match substitutions aren't wired either: `AIController.choisir_composition`
 returns only the onze, not the bench `MoteurPossession.simuler`'s
 optional `bancs` parameter (step 7) needs.
 """
 
 from random import Random
 
+from core.ai.budgets import prime_classement
 from core.ai.controller import AIController
 from core.config.modeles.racine import Config
 from core.domain.competition import Competition
 from core.domain.date import Date
-from core.domain.historique import SaisonTerminee
+from core.domain.historique import MouvementFinancier, SaisonTerminee, TypeMouvementFinancier
 from core.domain.journal import EvenementJour, TypeEvenementJour
 from core.domain.match import Match
 from core.domain.monde import Monde
@@ -52,7 +76,10 @@ from core.engine.match import MoteurPossession
 from core.world import appliquer_match
 from core.world.calendrier import generer_calendrier
 from core.world.classement import calculer_classement
+from core.world.contrats import liberer_contrats_expires, renouveler_contrats
+from core.world.demographie.cycle_annuel import appliquer_cycle_annuel_effectif
 from core.world.etats import blessures, fatigue, suspensions
+from core.world.finances import appliquer_flux_mensuel
 from core.world.mercato import avancer_mercato
 
 _CONTROLEUR = AIController()
@@ -121,6 +148,20 @@ def _relancer_saison_au_1er_juillet(monde: Monde, cfg: Config, rng: Random) -> l
                     competition_id=competition.id,
                 )
             )
+            # Prime de classement (2026-09-12, explicite instruction
+            # utilisateur) : contre la place reelle de cette saison qui
+            # vient de se terminer, pas une estimation — voir
+            # core.ai.budgets.prime_classement.
+            for place, ligne in enumerate(classement, start=1):
+                club_classe = monde.clubs.get(ligne.club_id)
+                if club_classe is None:
+                    continue
+                prime = prime_classement(place, cfg)
+                club_classe.solde += prime
+                club_classe.budget_transfert += prime
+                monde.historique.mouvements_financiers.append(
+                    MouvementFinancier(TypeMouvementFinancier.PRIME_CLASSEMENT, monde.date, club_classe.id, prime, monde.saison)
+                )
 
         for joueur in monde.joueurs.values():
             if joueur.club_id in competition.club_ids:
@@ -160,6 +201,10 @@ def avancer_un_jour(monde: Monde, cfg: Config, rng: Random) -> list[EvenementJou
                 journal.append(EvenementJour(TypeEvenementJour.BLESSURE, f"{joueur.prenom} {joueur.nom} est blessé", joueur_id=joueur.id))
 
     monde.date = monde.date.plus_jours(1)
+    journal += renouveler_contrats(monde, cfg)
+    journal += appliquer_cycle_annuel_effectif(monde, cfg, rng)
+    journal += liberer_contrats_expires(monde, cfg)
+    appliquer_flux_mensuel(monde, cfg)
     journal += avancer_mercato(monde, cfg, rng)
     journal += _relancer_saison_au_1er_juillet(monde, cfg, rng)
     return journal

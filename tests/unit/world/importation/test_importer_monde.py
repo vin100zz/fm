@@ -92,6 +92,48 @@ def test_monde_importe_avec_succes_quand_toutes_les_competitions_sont_completes(
     assert monde.prochain_id > max(monde.joueurs)
 
 
+def test_le_plafond_salarial_suit_la_masse_salariale_reelle_dun_club(tmp_path: Path, cfg: Config) -> None:
+    """Un club a petit stade (faible reputation, donc petit plafond
+    derive) mais aux salaires reels eleves (donnees importees) doit
+    voir son plafond suivre ses salaires reels, pas rester bloque sur
+    le plafond derive de la reputation — voir masse_salariale_max_reelle
+    dans core/ai/budgets.py."""
+    clubs = []
+    joueurs = []
+    prochain_id_joueur = 1
+    for competition in cfg.monde.competitions_simulees:
+        for i in range(competition.nb_clubs):
+            club_id = f"{competition.division_id}{i:03d}"
+            stad_cap = "3000" if competition is cfg.monde.competitions_simulees[0] and i == 0 else "40000"
+            clubs.append(
+                une_ligne_club(**{"Unique ID": club_id, "Division ID": str(competition.division_id), "Stad Cap": stad_cap})
+            )
+            wage = "800000" if stad_cap == "3000" else "10000"
+            for _ in range(15):
+                joueurs.append(
+                    une_ligne_joueur(
+                        **{"Unique ID": str(prochain_id_joueur), "Club ID": club_id, "Position": "M C", "Wage": wage}
+                    )
+                )
+                prochain_id_joueur += 1
+            joueurs.append(
+                une_ligne_joueur(
+                    **{"Unique ID": str(prochain_id_joueur), "Club ID": club_id, "Position": "GK", "Wage": wage}
+                )
+            )
+            prochain_id_joueur += 1
+    clubs.append(une_ligne_club(**{"Unique ID": "999999", "Division ID": "-1", "Nation": "Kenya"}))
+
+    _ecrire_jeu_de_donnees(tmp_path, clubs, joueurs)
+
+    monde, _ = importer_monde(tmp_path, cfg, DATE_DEBUT, graine=1, rng=Random(1))
+
+    club_petit_stade_gros_salaires = monde.clubs[int(f"{cfg.monde.competitions_simulees[0].division_id}000")]
+    masse_reelle_hebdo = 16 * 800_000
+    plafond_attendu = round(masse_reelle_hebdo * (1 + cfg.ia.budgets.marge_masse_salariale_initiale))
+    assert club_petit_stade_gros_salaires.masse_salariale_max == plafond_attendu
+
+
 class TestImportReel:
     """Slower checks against the real data/ shipped with the project."""
 

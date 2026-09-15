@@ -161,6 +161,45 @@ def test_transferts_club_inconnu_404(client: TestClient) -> None:
     assert client.get("/api/clubs/999999999999/transferts").status_code == 404
 
 
+def test_mouvements_effectif_club_repond_une_liste_bien_formee(client: TestClient) -> None:
+    # A ce point du fichier, seuls quelques jours ont ete simules depuis
+    # le 10/08 : ni la retraite/promotion annuelle (15 juin) ni la
+    # liberation des contrats (1er juillet) n'ont eu l'occasion de se
+    # declencher — la liste peut donc etre vide, on verifie surtout la
+    # forme de la reponse (invariant, pas de valeur exacte).
+    club_id = client.get("/api/clubs", params={"statut": "actif", "recherche": "Paris SG"}).json()["items"][0]["id"]
+    reponse = client.get(f"/api/clubs/{club_id}/mouvements-effectif")
+    assert reponse.status_code == 200
+    for mouvement in reponse.json():
+        assert mouvement["type"] in ("fin_contrat", "retraite", "promotion")
+        assert mouvement["joueur_nom"]
+
+
+def test_mouvements_effectif_club_filtre_par_type(client: TestClient) -> None:
+    club_id = client.get("/api/clubs", params={"statut": "actif", "recherche": "Paris SG"}).json()["items"][0]["id"]
+    reponse = client.get(f"/api/clubs/{club_id}/mouvements-effectif", params={"type": "retraite"})
+    assert reponse.status_code == 200
+    assert all(m["type"] == "retraite" for m in reponse.json())
+
+
+def test_mouvements_effectif_club_inconnu_404(client: TestClient) -> None:
+    assert client.get("/api/clubs/999999999999/mouvements-effectif").status_code == 404
+
+
+def test_historique_financier_club_repond_une_liste_bien_formee(client: TestClient) -> None:
+    club_id = client.get("/api/clubs", params={"statut": "actif", "recherche": "Paris SG"}).json()["items"][0]["id"]
+    reponse = client.get(f"/api/clubs/{club_id}/historique-financier")
+    assert reponse.status_code == 200
+    types_valides = {"revenu_mensuel", "salaires", "prime_classement", "achat_transfert", "vente_transfert"}
+    for ligne in reponse.json():
+        assert ligne["type"] in types_valides
+        assert ligne["description"]
+
+
+def test_historique_financier_club_inconnu_404(client: TestClient) -> None:
+    assert client.get("/api/clubs/999999999999/historique-financier").status_code == 404
+
+
 def test_match_inconnu_404(client: TestClient) -> None:
     assert client.get("/api/matches/999999999999").status_code == 404
 

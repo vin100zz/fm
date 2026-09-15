@@ -1,4 +1,4 @@
-from core.ai.selection import choisir_composition, decider_remplacement
+from core.ai.selection import _selectionner_onze, choisir_composition, decider_remplacement
 from core.config import Config
 from core.domain.attributs import Attributs
 from core.domain.date import Date
@@ -37,6 +37,32 @@ def test_choisir_composition_ecarte_les_blesses(cfg: Config) -> None:
     joueurs_retenus = {position.joueur.id for position in equipe.onze}
     assert 9 not in joueurs_retenus
     assert 500 in joueurs_retenus
+
+
+def test_choisir_composition_complete_avec_des_dummy_si_effectif_trop_petit(cfg: Config) -> None:
+    """Repere en production (2026-09-11) : un effectif appauvri par les
+    renouvellements/agents libres/demarchages tombe sous 11 joueurs
+    disponibles -> IndexError sur candidats[0]. `_joueur_dummy` complete
+    desormais le onze avec des joueurs de secours transitoires plutot
+    que de planter (demande explicite de l'utilisateur)."""
+    club = un_club(formation_preferee="4-4-2")
+    adversaire = un_club(id=2, formation_preferee="4-4-2")
+    effectif = [un_joueur(id=i, poste=Poste.MC, club_id=club.id, attributs=_uniforme(60)) for i in range(5)]
+
+    equipe = choisir_composition(club, effectif, adversaire, domicile=True, cfg=cfg)
+
+    assert len(equipe.onze) == 11
+    dummies = [position.joueur for position in equipe.onze if position.joueur.nom == "Dummy"]
+    assert len(dummies) == 6  # 11 slots, 5 vrais joueurs
+    assert len({d.id for d in dummies}) == 6  # chacun un id distinct
+    for dummy in dummies:
+        assert dummy.attributs.valeur("passe") == round(60 * (1 - cfg.ia.selection.reduction_niveau_dummy))
+
+
+def test_selectionner_onze_cree_des_dummy_si_aucun_joueur_disponible(cfg: Config) -> None:
+    onze = _selectionner_onze([], "4-4-2", cfg.ia.selection, cfg, effectif_reference=[])
+    assert len(onze) == 11
+    assert all(position.joueur.nom == "Dummy" for position in onze)
 
 
 def test_hauteur_bloc_plus_haute_a_domicile_et_contre_plus_faible(cfg: Config) -> None:
